@@ -1,7 +1,5 @@
 # Multi-Model Q&A System in a Single Window
 
-  <a href="README.md">简体中文</a>
-
 This is a C# and WebView2-based implementation that opens multiple large model systems in a single window. You can input your query in the window and simultaneously send the same question to Tongyi Qianwen, Doubao, and DeepSeek, and view the responses from each model.
 
 Before use, users need to log in to each website individually. After logging in, the same input can be received and responded to by all models.
@@ -27,6 +25,16 @@ Please Give an Star if you like it.
    Node.js: 20.19.0
    V8: 13.2.152.41-electron.0
    OS: Windows_NT x64 10.0.19045
+
+## Latest Release
+
+Current version: **V1.1** ([Release Notes](releases/RELEASE_NOTES_V1.1.md))
+
+### Download Links
+- [MultiModelChat_V1.1.zip](https://github.com/your-username/MultiModelChatInOneWindow/releases/download/V1.1/MultiModelChat_V1.1.zip) - Complete executable package
+
+*Note: Release files can be downloaded from the GitHub Release page. Local releases directory files are not included in version control.*
+
 ## Features
 
 1. Full-screen window interface
@@ -34,6 +42,8 @@ Please Give an Star if you like it.
 3. Bottom section is divided into three columns, displaying Tongyi Qianwen, Doubao, and DeepSeek web pages
 4. After clicking the query button, the question is automatically injected into the input boxes of all three websites
 5. Supports window size adjustment and rearrangement
+6. Added expand/collapse functionality to view a specific model's interface in full screen
+7. Added clear button for easy input text clearing
 
 ## System Requirements
 
