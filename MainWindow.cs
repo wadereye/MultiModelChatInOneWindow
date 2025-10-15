@@ -193,8 +193,14 @@ namespace MultiModelChat
                 // 等待粘贴完成
                 await Task.Delay(100);
                 
+                // 增加延迟确保粘贴完成后再发送回车
+                await Task.Delay(200);
+                
                 // 发送回车键
                 SendKeys.SendWait("{ENTER}");
+                
+                // 再增加一个短延迟，确保回车被处理
+                await Task.Delay(100);
             }
             catch (Exception ex)
             {
@@ -249,8 +255,14 @@ namespace MultiModelChat
                 // 等待粘贴完成
                 await Task.Delay(100);
                 
+                // 增加延迟确保粘贴完成后再发送回车
+                await Task.Delay(200);
+                
                 // 发送回车键
                 SendKeys.SendWait("{ENTER}");
+                
+                // 再增加一个短延迟，确保回车被处理
+                await Task.Delay(100);
             }
             catch (Exception ex)
             {
