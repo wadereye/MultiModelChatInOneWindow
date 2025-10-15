@@ -6,6 +6,8 @@ This is a C# and WebView2-based implementation that opens multiple large model s
 
 Before use, users need to log in to each website individually. After logging in, the same input can be received and responded to by all models.
 
+Please Give an Star if you like it.
+
 ## Final Effect
 
 ![Final Effect](img/最终效果.png)
