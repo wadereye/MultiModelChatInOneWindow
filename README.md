@@ -1,2 +1,74 @@
-# -MultiModelChat
-It supports entering a single chat message in the same window and viewing the results on Tongyi, Doubao, and Deepseek simultaneously.
+# 多模型问答系统
+
+这是一个基于C#和WebView2的多模型问答系统，可以同时向通义千问、豆包和DeepSeek发送相同的问题，并查看各模型的回答。
+
+## 功能特点
+
+1. 全屏窗口界面
+2. 上方包含搜索输入框和查询按钮
+3. 下方分为三栏，分别显示通义千问、豆包和DeepSeek网页
+4. 点击查询按钮后，自动将问题注入到三个网站的输入框中
+5. 支持窗口大小调整和重新排列
+
+## 系统要求
+
+- Windows 10 或更高版本
+- .NET 6.0 SDK
+- Microsoft Edge WebView2 Runtime (通常会随Windows更新自动安装)
+
+## 安装和运行
+
+1. 确保已安装 .NET 6.0 SDK
+2. 使用Visual Studio或命令行打开项目
+3. 还原NuGet包:
+   ```
+   dotnet restore
+   ```
+4. 构建项目:
+   ```
+   dotnet build
+   ```
+5. 运行项目:
+   ```
+   dotnet run
+   ```
+
+## 使用方法
+
+1. 启动应用程序后，窗口会自动全屏显示
+2. 在顶部输入框中输入您要查询的问题
+3. 点击"查询"按钮或按回车键
+4. 程序会自动：
+   - 切换到各个模型窗口
+   - 通过JavaScript点击输入框区域确保焦点
+   - 将问题复制到剪贴板
+   - 模拟Ctrl+V粘贴操作
+   - 模拟回车键发送问题
+5. 各模型会自动接收并处理问题
+
+## 技术实现
+
+- 使用C# WinForms创建用户界面
+- 使用Microsoft WebView2控件嵌入网页
+- 通过JavaScript注入技术定位并点击输入框
+- 使用SendKeys类模拟键盘操作（粘贴和回车）
+- 支持响应式布局调整
+
+## 键盘模拟技术详解
+
+为了解决输入框焦点丢失的问题，程序采用了更可靠的键盘模拟方式：
+
+1. **窗口焦点切换**：首先切换到目标WebView窗口
+2. **JavaScript点击**：通过JavaScript代码点击输入框区域确保焦点
+3. **剪贴板操作**：将问题文本复制到系统剪贴板
+4. **键盘模拟**：使用SendKeys.SendWait方法模拟Ctrl+V粘贴操作
+5. **自动发送**：模拟回车键自动发送问题
+
+这种方式比直接的JavaScript注入更可靠，因为它模拟了真实的用户操作流程。
+
+## 注意事项
+
+- 首次运行时，WebView2可能需要下载运行时组件
+- 由于各网站的安全策略，注入效果可能因网站更新而变化
+- 程序运行时请勿手动操作键盘，以免干扰自动化流程
+- 某些杀毒软件可能会阻止键盘模拟操作，请将程序添加到信任列表
