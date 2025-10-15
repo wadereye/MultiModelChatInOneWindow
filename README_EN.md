@@ -31,7 +31,7 @@ Please Give an Star if you like it.
 Current version: **V1.1** ([Release Notes](releases/RELEASE_NOTES_V1.1.md))
 
 ### Download Links
-- [MultiModelChat_V1.1.zip](https://github.com/your-username/MultiModelChatInOneWindow/releases/download/V1.1/MultiModelChat_V1.1.zip) - Complete executable package
+- [MultiModelChat_V1.1.zip](https://github.com/wadereye/MultiModelChatInOneWindow/releases/download/V1.1/MultiModelChat_V1.1.zip) - Complete executable package
 
 *Note: Release files can be downloaded from the GitHub Release page. Local releases directory files are not included in version control.*
 

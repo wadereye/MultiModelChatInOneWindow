@@ -30,7 +30,7 @@
 当前最新版本: **V1.1** ([发布说明](releases/RELEASE_NOTES_V1.1.md))
 
 ### 下载地址
-- [MultiModelChat_V1.1.zip](https://github.com/your-username/MultiModelChatInOneWindow/releases/download/V1.1/MultiModelChat_V1.1.zip) - 完整的可执行程序包
+- [MultiModelChat_V1.1.zip](https://github.com/wadereye/MultiModelChatInOneWindow/releases/download/V1.1/MultiModelChat_V1.1.zip) - 完整的可执行程序包
 
 *注意：发布文件可从GitHub Release页面下载，本地releases目录中的文件不包含在版本控制中。*
 
