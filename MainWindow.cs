@@ -3,14 +3,25 @@ using System.Drawing;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.WinForms;
 using System.Threading.Tasks;
+using System.IO;
+using System.Text.Json;
 
 namespace MultiModelChat
 {
+    // 配置类
+    public class WebViewConfig
+    {
+        public string TongyiUrl { get; set; } = "https://tongyi.aliyun.com/qianwen/";
+        public string DoubaoUrl { get; set; } = "https://www.doubao.com/chat/";
+        public string DeepSeekUrl { get; set; } = "https://chat.deepseek.com/";
+    }
+
     public partial class MainWindow : Form
     {
         private TextBox searchTextBox;
         private Button searchButton;
-        private Button clearButton; // 新增清除按钮
+        private Button clearButton;
+        private Button configButton; // 新增配置按钮
         private Panel topPanel;
         private Panel bottomPanel;
         private Microsoft.Web.WebView2.WinForms.WebView2 tongyiWebView;
@@ -25,10 +36,15 @@ namespace MultiModelChat
         // 记录当前展开状态
         private enum ExpandState { None, Tongyi, Doubao, Deepseek }
         private ExpandState currentExpandState = ExpandState.None;
+        
+        // 配置信息
+        private WebViewConfig config = new WebViewConfig();
+        private string configFilePath = Path.Combine(Application.StartupPath, "webview_config.json");
 
         public MainWindow()
         {
             InitializeComponent();
+            LoadConfig(); // 加载配置
         }
 
         private void InitializeComponent()
@@ -80,6 +96,14 @@ namespace MultiModelChat
             clearButton.Font = new Font("微软雅黑", 12);
             clearButton.Click += ClearButton_Click;
             
+            // 创建配置按钮
+            configButton = new Button();
+            configButton.Location = new Point(clearButton.Right + 10, 30);
+            configButton.Size = new Size(80, 30);
+            configButton.Text = "配置";
+            configButton.Font = new Font("微软雅黑", 12);
+            configButton.Click += ConfigButton_Click;
+            
             // 创建展开按钮
             tongyiExpandButton = new Button();
             tongyiExpandButton.Text = "展开通义";
@@ -111,6 +135,7 @@ namespace MultiModelChat
             topPanel.Controls.Add(searchTextBox);
             topPanel.Controls.Add(searchButton);
             topPanel.Controls.Add(clearButton);
+            topPanel.Controls.Add(configButton);
             topPanel.Controls.Add(tongyiExpandButton);
             topPanel.Controls.Add(doubaoExpandButton);
             topPanel.Controls.Add(deepseekExpandButton);
@@ -154,10 +179,10 @@ namespace MultiModelChat
                 await doubaoWebView.EnsureCoreWebView2Async(null);
                 await deepseekWebView.EnsureCoreWebView2Async(null);
                 
-                // 导航到相应网站
-                tongyiWebView.CoreWebView2.Navigate("https://tongyi.aliyun.com/qianwen/");
-                doubaoWebView.CoreWebView2.Navigate("https://www.doubao.com/chat/");
-                deepseekWebView.CoreWebView2.Navigate("https://chat.deepseek.com/");
+                // 导航到配置中的网站
+                tongyiWebView.CoreWebView2.Navigate(config.TongyiUrl);
+                doubaoWebView.CoreWebView2.Navigate(config.DoubaoUrl);
+                deepseekWebView.CoreWebView2.Navigate(config.DeepSeekUrl);
             }
             catch (Exception ex)
             {
@@ -184,6 +209,67 @@ namespace MultiModelChat
             catch (Exception ex)
             {
                 MessageBox.Show($"发送问题时出错: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        // 配置按钮点击事件
+        private void ConfigButton_Click(object sender, EventArgs e)
+        {
+            using (var configForm = new ConfigForm(config))
+            {
+                if (configForm.ShowDialog() == DialogResult.OK)
+                {
+                    // 保存配置
+                    SaveConfig();
+                    // 重新加载WebView页面
+                    LoadWebViews();
+                }
+            }
+        }
+
+        // 加载配置
+        private void LoadConfig()
+        {
+            try
+            {
+                if (File.Exists(configFilePath))
+                {
+                    string json = File.ReadAllText(configFilePath);
+                    config = JsonSerializer.Deserialize<WebViewConfig>(json);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"加载配置文件时出错: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        // 保存配置
+        private void SaveConfig()
+        {
+            try
+            {
+                string json = JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(configFilePath, json);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"保存配置文件时出错: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        // 重新加载WebView页面
+        private void LoadWebViews()
+        {
+            try
+            {
+                tongyiWebView.CoreWebView2.Navigate(config.TongyiUrl);
+                doubaoWebView.CoreWebView2.Navigate(config.DoubaoUrl);
+                deepseekWebView.CoreWebView2.Navigate(config.DeepSeekUrl);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"重新加载WebView时出错: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -472,11 +558,10 @@ namespace MultiModelChat
                 // 调整输入框大小为窗口宽度的80%
                 searchTextBox.Size = new Size((int)(this.Width * 0.8) - 150, 30);
                 
-                // 调整查询按钮位置
+                // 调整按钮位置
                 searchButton.Location = new Point(searchTextBox.Right + 10, 30);
-                
-                // 调整清除按钮位置
                 clearButton.Location = new Point(searchButton.Right + 10, 30);
+                configButton.Location = new Point(clearButton.Right + 10, 30);
                 
                 // 调整展开按钮位置
                 doubaoExpandButton.Location = new Point(tongyiExpandButton.Right + 10, 65);
