@@ -12,27 +12,43 @@
 
 ## 说明
   我在使用大模型查询资料的时候，经常会遇到需要将同一个问题在多家大模型中进行问答，并找出他们回答的不同之处和相同之处，以判断是否有幻觉，或者输出错误的内容。
+
   现实中我需要反复复制一个问题，到各个浏览器里进行操作，觉得有点麻烦，所以就写了这么一个玩意儿。
+
   这个在我的显示屏2560x1440分辨上 ，可以完整地看到不同的大模型厂家输出内容。
-  本软件代码，全部由AI生成，我只写了提示词，我使用的工具是Qorder,版本如下
-  版本: 0.2.5
+
+  本软件代码，全部由AI生成，我只写了提示词，工具是Qorder,不管是开发还是打包，都由工具完成。
+
+  Qorder版本: 0.2.5
+
    VSCode Version: 1.100.0 (user setup)
+
    提交: 16cd366960161a956c5ec5d028a1a295e2b0529c
+
    日期: 2025-10-10T12:08:54.752Z
+
    Electron: 34.5.1
+
    Chromium: 132.0.6834.210
+
    Node.js: 20.19.0
+
    V8: 13.2.152.41-electron.0
+
    OS: Windows_NT x64 10.0.19045
 
 ## 最新版本
 
-当前最新版本: **V1.1** ([发布说明](releases/RELEASE_NOTES_V1.1.md))
+当前最新版本: **V1.2** ([发布说明](RELEASE_NOTES_V1.2.md))
 
 ### 下载地址
-- [MultiModelChat_V1.1.zip](https://github.com/wadereye/MultiModelChatInOneWindow/blob/main/ReleasesFile/MultiModelChat_V1.1.zip) - 完整的可执行程序包
 
-*注意：发布文件可从GitHub Release页面下载，本地releases目录中的文件不包含在版本控制中。*
+- [MultiModelChat_V1.2_win-x64.zip](https://github.com/wadereye/MultiModelChatInOneWindow/blob/main/ReleasesFile/MultiModelChat_V1.2_win-x64.zip) - Windows x64 版本
+- [MultiModelChat_V1.2_win-x86.zip](https://github.com/wadereye/MultiModelChatInOneWindow/blob/main/ReleasesFile/MultiModelChat_V1.2_win-x86.zip) - Windows x86 版本
+- [MultiModelChat_V1.2_win-arm64.zip](https://github.com/wadereye/MultiModelChatInOneWindow/blob/main/ReleasesFile/MultiModelChat_V1.2_win-arm64.zip) - Windows ARM64 版本
+
+
+*注意：发布文件可从GitHub Release页面下载，这些是自包含的可执行文件，无需安装.NET运行时。*
 
 ## 功能特点
 
@@ -43,29 +59,19 @@
 5. 支持窗口大小调整和重新排列
 6. 增加了展开/收缩功能，可以单独查看某个模型的完整界面
 7. 添加了清除按钮，方便清空输入框内容
+8. 添加了配置按钮，允许自定义三个WebView的URL地址
+9. 支持多架构（x64、x86、ARM64）
 
 ## 系统要求
 
 - Windows 10 或更高版本
-- .NET 6.0 SDK
-- Microsoft Edge WebView2 Runtime (通常会随Windows更新自动安装)
+- 无需额外的运行时依赖（自包含包）
 
 ## 安装和运行
 
-1. 确保已安装 .NET 6.0 SDK
-2. 使用Visual Studio或命令行打开项目
-3. 还原NuGet包:
-   ```
-   dotnet restore
-   ```
-4. 构建项目:
-   ```
-   dotnet build
-   ```
-5. 运行项目:
-   ```
-   dotnet run
-   ```
+1. 下载适合您系统的版本
+2. 解压所有文件到您选择的文件夹
+3. 运行 MultiModelChat.exe 启动应用程序
 
 ## 使用方法
 
