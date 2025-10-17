@@ -55,6 +55,13 @@ namespace MultiModelChat
             this.StartPosition = FormStartPosition.CenterScreen;
             this.Size = new Size(1200, 800);
             
+            // 设置窗体图标
+            string iconPath = Path.Combine(Application.StartupPath, "img", "favicon.ico");
+            if (File.Exists(iconPath))
+            {
+                this.Icon = new Icon(iconPath);
+            }
+            
             // 创建上方面板
             CreateTopPanel();
             

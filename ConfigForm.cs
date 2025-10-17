@@ -1,6 +1,7 @@
 using System;
 using System.Drawing;
 using System.Windows.Forms;
+using System.IO;
 
 namespace MultiModelChat
 {
@@ -29,6 +30,13 @@ namespace MultiModelChat
             this.FormBorderStyle = FormBorderStyle.FixedDialog;
             this.MaximizeBox = false;
             this.MinimizeBox = false;
+
+            // 设置窗体图标
+            string iconPath = Path.Combine(Application.StartupPath, "img", "favicon.ico");
+            if (File.Exists(iconPath))
+            {
+                this.Icon = new Icon(iconPath);
+            }
 
             // 创建标签和文本框
             Label tongyiLabel = new Label();
