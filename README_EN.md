@@ -1,6 +1,6 @@
 # Multi-Model Q&A System in a Single Window
 
-This is a C# and WebView2-based implementation that opens multiple large model systems in a single window. You can input your query in the window and simultaneously send the same question to Tongyi Qianwen, Doubao, and DeepSeek, and view the responses from each model.
+This is a C# and CefSharp (Chromium 109) based implementation that opens multiple large model systems in a single window. You can input your query in the window and simultaneously send the same question to Tongyi Qianwen, Doubao, and DeepSeek, and view the responses from each model.
 
 Before use, users need to log in to each website individually. After logging in, the same input can be received and responded to by all models.
 
@@ -55,8 +55,8 @@ Current version: **V1.2** ([Release Notes](RELEASE_NOTES_V1.2.md))
 
 ## System Requirements
 
-- Windows 10 or higher
-- No additional runtime requirements (self-contained package)
+- Windows 7 SP1 or higher
+- Requires .NET Framework 4.8 and Microsoft Visual C++ 2015-2019 Redistributable
 
 ## Installation and Running
 
@@ -80,7 +80,7 @@ Current version: **V1.2** ([Release Notes](RELEASE_NOTES_V1.2.md))
 ## Technical Implementation
 
 - Create user interface using C# WinForms
-- Embed web pages using Microsoft WebView2 controls
+- Embed web pages using CefSharp.WinForms (Chromium 109)
 - Locate and click input boxes through JavaScript injection technology
 - Simulate keyboard operations (paste and enter) using SendKeys class
 - Support responsive layout adjustment
@@ -99,7 +99,7 @@ This approach is more reliable than direct JavaScript injection because it simul
 
 ## Notes
 
-- On first run, WebView2 may need to download runtime components
+- On Windows 7, install .NET Framework 4.8 and VC++ 2015-2019 in advance. WebView2 runtime is no longer required.
 - Due to the security policies of various websites, the injection effect may change with website updates
 - Do not manually operate the keyboard while the program is running to avoid interfering with the automation process
 - Some antivirus software may block keyboard simulation operations, please add the program to the trusted list

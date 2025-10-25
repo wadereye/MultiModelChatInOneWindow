@@ -1,10 +1,11 @@
 using System;
 using System.Drawing;
 using System.Windows.Forms;
-using Microsoft.Web.WebView2.WinForms;
 using System.Threading.Tasks;
 using System.IO;
 using System.Text.Json;
+using CefSharp;
+using CefSharp.WinForms;
 
 namespace MultiModelChat
 {
@@ -18,15 +19,20 @@ namespace MultiModelChat
 
     public partial class MainWindow : Form
     {
+        private void Log(string msg)
+        {
+            try { File.AppendAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "app_startup.log"), $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {msg}\n"); } catch { }
+        }
+
         private TextBox searchTextBox;
         private Button searchButton;
         private Button clearButton;
         private Button configButton; // 新增配置按钮
         private Panel topPanel;
         private Panel bottomPanel;
-        private Microsoft.Web.WebView2.WinForms.WebView2 tongyiWebView;
-        private Microsoft.Web.WebView2.WinForms.WebView2 doubaoWebView;
-        private Microsoft.Web.WebView2.WinForms.WebView2 deepseekWebView;
+        private ChromiumWebBrowser tongyiBrowser;
+        private ChromiumWebBrowser doubaoBrowser;
+        private ChromiumWebBrowser deepseekBrowser;
         
         // 为每个WebView添加独立显示按钮
         private Button tongyiExpandButton;
@@ -43,12 +49,23 @@ namespace MultiModelChat
 
         public MainWindow()
         {
+            Log("MainWindow ctor start");
             InitializeComponent();
-            LoadConfig(); // 加载配置
+            Log("InitializeComponent done");
+            try
+            {
+                LoadConfig(); // 加载配置
+                Log("LoadConfig done");
+            }
+            catch (Exception ex)
+            {
+                Log("LoadConfig exception: " + ex.Message);
+            }
         }
 
         private void InitializeComponent()
         {
+            Log("InitializeComponent enter");
             // 设置窗体属性
             this.Text = "多模型问答系统";
             this.WindowState = FormWindowState.Maximized;
@@ -71,10 +88,13 @@ namespace MultiModelChat
             // 添加面板到窗体
             this.Controls.Add(topPanel);
             this.Controls.Add(bottomPanel);
+            this.Load += (s, e) => Log("MainWindow Load event fired");
+            Log("InitializeComponent exit");
         }
 
         private void CreateTopPanel()
         {
+            Log("CreateTopPanel enter");
             topPanel = new Panel();
             topPanel.Dock = DockStyle.Top;
             topPanel.Height = 100;
@@ -85,7 +105,6 @@ namespace MultiModelChat
             searchTextBox.Location = new Point(20, 30);
             searchTextBox.Size = new Size((int)(this.Width * 0.8) - 150, 30); // 80%宽度减去按钮宽度
             searchTextBox.Font = new Font("微软雅黑", 12);
-            searchTextBox.PlaceholderText = "请输入您的问题...";
             
             // 创建查询按钮
             searchButton = new Button();
@@ -146,55 +165,42 @@ namespace MultiModelChat
             topPanel.Controls.Add(tongyiExpandButton);
             topPanel.Controls.Add(doubaoExpandButton);
             topPanel.Controls.Add(deepseekExpandButton);
+            Log("CreateTopPanel exit");
         }
 
         private void CreateBottomPanel()
         {
+            Log("CreateBottomPanel enter");
             bottomPanel = new Panel();
             bottomPanel.Dock = DockStyle.Fill;
-            bottomPanel.Padding = new Padding(0, 100, 0, 0); // 为上方面板留出空间
-            
-            // 创建三个WebView控件
-            tongyiWebView = new Microsoft.Web.WebView2.WinForms.WebView2();
-            doubaoWebView = new Microsoft.Web.WebView2.WinForms.WebView2();
-            deepseekWebView = new Microsoft.Web.WebView2.WinForms.WebView2();
-            
-            // 设置WebView属性
-            tongyiWebView.Dock = DockStyle.Left;
-            tongyiWebView.Width = (this.Width / 3) - 10;
-            
-            doubaoWebView.Dock = DockStyle.Left;
-            doubaoWebView.Width = (this.Width / 3) - 10;
-            
-            deepseekWebView.Dock = DockStyle.Fill;
-            
-            // 初始化WebView
-            InitializeWebViews();
-            
-            // 添加WebView到下面板
-            bottomPanel.Controls.Add(deepseekWebView);
-            bottomPanel.Controls.Add(doubaoWebView);
-            bottomPanel.Controls.Add(tongyiWebView);
-        }
-
-        private async void InitializeWebViews()
-        {
+            bottomPanel.Padding = new Padding(0, 100, 0, 0);
             try
             {
-                // 初始化WebView2控件
-                await tongyiWebView.EnsureCoreWebView2Async(null);
-                await doubaoWebView.EnsureCoreWebView2Async(null);
-                await deepseekWebView.EnsureCoreWebView2Async(null);
+                tongyiBrowser = new ChromiumWebBrowser(config.TongyiUrl);
+                doubaoBrowser = new ChromiumWebBrowser(config.DoubaoUrl);
+                deepseekBrowser = new ChromiumWebBrowser(config.DeepSeekUrl);
+                Log("ChromiumWebBrowser instances created");
+                // 设置浏览器属性
+                tongyiBrowser.Dock = DockStyle.Left;
+                tongyiBrowser.Width = (this.Width / 3) - 10;
                 
-                // 导航到配置中的网站
-                tongyiWebView.CoreWebView2.Navigate(config.TongyiUrl);
-                doubaoWebView.CoreWebView2.Navigate(config.DoubaoUrl);
-                deepseekWebView.CoreWebView2.Navigate(config.DeepSeekUrl);
+                doubaoBrowser.Dock = DockStyle.Left;
+                doubaoBrowser.Width = (this.Width / 3) - 10;
+                
+                deepseekBrowser.Dock = DockStyle.Fill;
+                
+                // 添加浏览器到下面板
+                bottomPanel.Controls.Add(deepseekBrowser);
+                bottomPanel.Controls.Add(doubaoBrowser);
+                bottomPanel.Controls.Add(tongyiBrowser);
+                Log("Browsers added to bottomPanel");
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"初始化WebView时出错: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                Log("CreateBottomPanel exception: " + ex.Message);
+                MessageBox.Show("创建浏览器控件失败：" + ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
+            Log("CreateBottomPanel exit");
         }
 
         private async void SearchButton_Click(object sender, EventArgs e)
@@ -228,7 +234,7 @@ namespace MultiModelChat
                 {
                     // 保存配置
                     SaveConfig();
-                    // 重新加载WebView页面
+                    // 重新加载页面
                     LoadWebViews();
                 }
             }
@@ -265,18 +271,18 @@ namespace MultiModelChat
             }
         }
 
-        // 重新加载WebView页面
+        // 重新加载页面
         private void LoadWebViews()
         {
             try
             {
-                tongyiWebView.CoreWebView2.Navigate(config.TongyiUrl);
-                doubaoWebView.CoreWebView2.Navigate(config.DoubaoUrl);
-                deepseekWebView.CoreWebView2.Navigate(config.DeepSeekUrl);
+                tongyiBrowser.Load(config.TongyiUrl);
+                doubaoBrowser.Load(config.DoubaoUrl);
+                deepseekBrowser.Load(config.DeepSeekUrl);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"重新加载WebView时出错: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"重新加载浏览器时出错: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -335,25 +341,25 @@ namespace MultiModelChat
         // 展开单个窗口
         private void ExpandSingleWindow(ExpandState state)
         {
-            // 隐藏所有WebView
-            tongyiWebView.Visible = false;
-            doubaoWebView.Visible = false;
-            deepseekWebView.Visible = false;
+            // 隐藏所有浏览器
+            tongyiBrowser.Visible = false;
+            doubaoBrowser.Visible = false;
+            deepseekBrowser.Visible = false;
             
-            // 根据状态显示对应的WebView并设置为全屏
+            // 根据状态显示对应的浏览器并设置为全屏
             switch (state)
             {
                 case ExpandState.Tongyi:
-                    tongyiWebView.Visible = true;
-                    tongyiWebView.Dock = DockStyle.Fill;
+                    tongyiBrowser.Visible = true;
+                    tongyiBrowser.Dock = DockStyle.Fill;
                     break;
                 case ExpandState.Doubao:
-                    doubaoWebView.Visible = true;
-                    doubaoWebView.Dock = DockStyle.Fill;
+                    doubaoBrowser.Visible = true;
+                    doubaoBrowser.Dock = DockStyle.Fill;
                     break;
                 case ExpandState.Deepseek:
-                    deepseekWebView.Visible = true;
-                    deepseekWebView.Dock = DockStyle.Fill;
+                    deepseekBrowser.Visible = true;
+                    deepseekBrowser.Dock = DockStyle.Fill;
                     break;
             }
         }
@@ -361,19 +367,19 @@ namespace MultiModelChat
         // 恢复三列布局
         private void RestoreThreeColumnLayout()
         {
-            // 显示所有WebView
-            tongyiWebView.Visible = true;
-            doubaoWebView.Visible = true;
-            deepseekWebView.Visible = true;
+            // 显示所有浏览器
+            tongyiBrowser.Visible = true;
+            doubaoBrowser.Visible = true;
+            deepseekBrowser.Visible = true;
             
             // 恢复原始布局
-            tongyiWebView.Dock = DockStyle.Left;
-            tongyiWebView.Width = (this.Width / 3) - 10;
+            tongyiBrowser.Dock = DockStyle.Left;
+            tongyiBrowser.Width = (this.Width / 3) - 10;
             
-            doubaoWebView.Dock = DockStyle.Left;
-            doubaoWebView.Width = (this.Width / 3) - 10;
+            doubaoBrowser.Dock = DockStyle.Left;
+            doubaoBrowser.Width = (this.Width / 3) - 10;
             
-            deepseekWebView.Dock = DockStyle.Fill;
+            deepseekBrowser.Dock = DockStyle.Fill;
         }
 
         private async Task SimulateInputToTongyi(string question)
@@ -381,7 +387,7 @@ namespace MultiModelChat
             try
             {
                 // 切换到通义千问窗口
-                tongyiWebView.Focus();
+                tongyiBrowser.Focus();
                 
                 // 等待窗口获得焦点
                 await Task.Delay(100);
@@ -409,7 +415,7 @@ namespace MultiModelChat
                     })();
                 ";
                 
-                await tongyiWebView.ExecuteScriptAsync(clickScript);
+                await tongyiBrowser.EvaluateScriptAsync(clickScript);
                 
                 // 等待点击生效
                 await Task.Delay(200);
@@ -443,7 +449,7 @@ namespace MultiModelChat
             try
             {
                 // 切换到豆包窗口
-                doubaoWebView.Focus();
+                doubaoBrowser.Focus();
                 
                 // 等待窗口获得焦点
                 await Task.Delay(100);
@@ -471,7 +477,7 @@ namespace MultiModelChat
                     })();
                 ";
                 
-                await doubaoWebView.ExecuteScriptAsync(clickScript);
+                await doubaoBrowser.EvaluateScriptAsync(clickScript);
                 
                 // 等待点击生效
                 await Task.Delay(200);
@@ -505,7 +511,7 @@ namespace MultiModelChat
             try
             {
                 // 切换到DeepSeek窗口
-                deepseekWebView.Focus();
+                deepseekBrowser.Focus();
                 
                 // 等待窗口获得焦点
                 await Task.Delay(100);
@@ -533,7 +539,7 @@ namespace MultiModelChat
                     })();
                 ";
                 
-                await deepseekWebView.ExecuteScriptAsync(clickScript);
+                await deepseekBrowser.EvaluateScriptAsync(clickScript);
                 
                 // 等待点击生效
                 await Task.Delay(200);
@@ -560,7 +566,7 @@ namespace MultiModelChat
         {
             base.OnResize(e);
             // 窗口大小改变时重新调整布局
-            if (bottomPanel != null && tongyiWebView != null && doubaoWebView != null)
+            if (bottomPanel != null && tongyiBrowser != null && doubaoBrowser != null)
             {
                 // 调整输入框大小为窗口宽度的80%
                 searchTextBox.Size = new Size((int)(this.Width * 0.8) - 150, 30);
@@ -574,11 +580,11 @@ namespace MultiModelChat
                 doubaoExpandButton.Location = new Point(tongyiExpandButton.Right + 10, 65);
                 deepseekExpandButton.Location = new Point(doubaoExpandButton.Right + 10, 65);
                 
-                // 如果当前不是展开状态，则调整WebView宽度
+                // 如果当前不是展开状态，则调整浏览器宽度
                 if (currentExpandState == ExpandState.None)
                 {
-                    tongyiWebView.Width = (this.Width / 3) - 10;
-                    doubaoWebView.Width = (this.Width / 3) - 10;
+                    tongyiBrowser.Width = (this.Width / 3) - 10;
+                    doubaoBrowser.Width = (this.Width / 3) - 10;
                 }
             }
         }
