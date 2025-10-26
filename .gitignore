@@ -41,6 +41,10 @@ ScaffoldingReadMe.txt
 *~
 CodeCoverage/
 
+# CefSharp cache directories
+GPUCache/
+DawnCache/
+
 # MSBuild Binary and Structured Log
 *.binlog
 
