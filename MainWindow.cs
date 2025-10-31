@@ -133,7 +133,7 @@ namespace MultiModelChat
             doubaoExpandButton.Click += (sender, e) => ToggleExpand(ExpandState.Doubao);
             
             deepseekExpandButton = new Button();
-            deepseekExpandButton.Text = "展开DeepSeek";
+            deepseekExpandButton.Text = "展开DS";
             deepseekExpandButton.Size = new Size(110, buttonHeight);
             deepseekExpandButton.Location = new Point(doubaoExpandButton.Right + buttonSpacing, buttonY);
             deepseekExpandButton.Font = new Font("微软雅黑", 10);
@@ -426,7 +426,7 @@ namespace MultiModelChat
                         doubaoExpandButton.Text = "展开豆包";
                         break;
                     case ExpandState.Deepseek:
-                        deepseekExpandButton.Text = "展开DeepSeek";
+                        deepseekExpandButton.Text = "展开DS";
                         break;
                 }
             }
