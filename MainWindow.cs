@@ -4,6 +4,8 @@ using System.Windows.Forms;
 using System.Threading.Tasks;
 using System.IO;
 using System.Text.Json;
+using System.Collections.Generic;
+using System.Linq;
 using CefSharp;
 using CefSharp.WinForms;
 
@@ -28,11 +30,13 @@ namespace MultiModelChat
         private Button searchButton;
         private Button clearButton;
         private Button configButton; // 新增配置按钮
+        private Button historyButton; // 新增查看历史按钮
         private Panel topPanel;
         private Panel bottomPanel;
         private ChromiumWebBrowser tongyiBrowser;
         private ChromiumWebBrowser doubaoBrowser;
         private ChromiumWebBrowser deepseekBrowser;
+        private string historyFilePath; // 历史记录文件路径
         
         // 为每个WebView添加独立显示按钮
         private Button tongyiExpandButton;
@@ -55,6 +59,7 @@ namespace MultiModelChat
             try
             {
                 LoadConfig(); // 加载配置
+                historyFilePath = Path.Combine(Application.StartupPath, "history.txt");
                 Log("LoadConfig done");
             }
             catch (Exception ex)
@@ -97,18 +102,24 @@ namespace MultiModelChat
             Log("CreateTopPanel enter");
             topPanel = new Panel();
             topPanel.Dock = DockStyle.Top;
-            topPanel.Height = 100;
+            topPanel.Height = 120; // 调整高度，因为展开按钮移到顶部了
             topPanel.BackColor = Color.LightGray;
             
-            // 创建搜索输入框，调整为窗口宽度的80%
+            // 创建按钮面板 - 顶部的所有按钮都放在这里
+            Panel buttonPanel = new Panel();
+            buttonPanel.Size = new Size(this.Width - 40, 35);
+            buttonPanel.Location = new Point(20, 10);
+            
+            // 创建搜索输入框，调整为多行输入，高度为60（约三行）
             searchTextBox = new TextBox();
-            searchTextBox.Location = new Point(20, 30);
-            searchTextBox.Size = new Size((int)(this.Width * 0.8) - 150, 30); // 80%宽度减去按钮宽度
+            searchTextBox.Location = new Point(20, 55);
+            searchTextBox.Size = new Size(this.Width - 40, 50);
             searchTextBox.Font = new Font("微软雅黑", 12);
+            searchTextBox.Multiline = true;
+            searchTextBox.ScrollBars = ScrollBars.Vertical;
             
             // 创建查询按钮
             searchButton = new Button();
-            searchButton.Location = new Point(searchTextBox.Right + 10, 30);
             searchButton.Size = new Size(80, 30);
             searchButton.Text = "查询";
             searchButton.Font = new Font("微软雅黑", 12);
@@ -116,7 +127,6 @@ namespace MultiModelChat
             
             // 创建清除按钮
             clearButton = new Button();
-            clearButton.Location = new Point(searchButton.Right + 10, 30);
             clearButton.Size = new Size(80, 30);
             clearButton.Text = "清除";
             clearButton.Font = new Font("微软雅黑", 12);
@@ -124,47 +134,54 @@ namespace MultiModelChat
             
             // 创建配置按钮
             configButton = new Button();
-            configButton.Location = new Point(clearButton.Right + 10, 30);
             configButton.Size = new Size(80, 30);
             configButton.Text = "配置";
             configButton.Font = new Font("微软雅黑", 12);
             configButton.Click += ConfigButton_Click;
             
+            // 创建历史按钮
+            historyButton = new Button();
+            historyButton.Size = new Size(80, 30);
+            historyButton.Text = "历史";
+            historyButton.Font = new Font("微软雅黑", 12);
+            historyButton.Click += HistoryButton_Click;
+            
             // 创建展开按钮
             tongyiExpandButton = new Button();
             tongyiExpandButton.Text = "展开通义";
             tongyiExpandButton.Size = new Size(80, 25);
-            tongyiExpandButton.Location = new Point(20, 65);
             tongyiExpandButton.Click += (sender, e) => ToggleExpand(ExpandState.Tongyi);
             
             doubaoExpandButton = new Button();
             doubaoExpandButton.Text = "展开豆包";
             doubaoExpandButton.Size = new Size(80, 25);
-            doubaoExpandButton.Location = new Point(tongyiExpandButton.Right + 10, 65);
             doubaoExpandButton.Click += (sender, e) => ToggleExpand(ExpandState.Doubao);
             
             deepseekExpandButton = new Button();
             deepseekExpandButton.Text = "展开DeepSeek";
             deepseekExpandButton.Size = new Size(100, 25);
-            deepseekExpandButton.Location = new Point(doubaoExpandButton.Right + 10, 65);
             deepseekExpandButton.Click += (sender, e) => ToggleExpand(ExpandState.Deepseek);
+            
+            // 添加所有按钮到同一个按钮面板（查询、清除、配置、历史、展开按钮）
+            buttonPanel.Controls.Add(searchButton);
+            buttonPanel.Controls.Add(clearButton);
+            buttonPanel.Controls.Add(configButton);
+            buttonPanel.Controls.Add(historyButton);
+            buttonPanel.Controls.Add(tongyiExpandButton);
+            buttonPanel.Controls.Add(doubaoExpandButton);
+            buttonPanel.Controls.Add(deepseekExpandButton);
             
             // 添加回车键支持
             searchTextBox.KeyDown += (sender, e) => {
-                if (e.KeyCode == Keys.Enter)
+                if (e.KeyCode == Keys.Enter && e.Control) // Ctrl+Enter 发送
                 {
                     SearchButton_Click(sender, e);
                 }
             };
             
             // 添加控件到上方面板
+            topPanel.Controls.Add(buttonPanel);
             topPanel.Controls.Add(searchTextBox);
-            topPanel.Controls.Add(searchButton);
-            topPanel.Controls.Add(clearButton);
-            topPanel.Controls.Add(configButton);
-            topPanel.Controls.Add(tongyiExpandButton);
-            topPanel.Controls.Add(doubaoExpandButton);
-            topPanel.Controls.Add(deepseekExpandButton);
             Log("CreateTopPanel exit");
         }
 
@@ -173,7 +190,7 @@ namespace MultiModelChat
             Log("CreateBottomPanel enter");
             bottomPanel = new Panel();
             bottomPanel.Dock = DockStyle.Fill;
-            bottomPanel.Padding = new Padding(0, 100, 0, 0);
+            bottomPanel.Padding = new Padding(0, 120, 0, 0); // 调整上边距以适应新的顶部面板高度
             try
             {
                 tongyiBrowser = new ChromiumWebBrowser(config.TongyiUrl);
@@ -211,6 +228,9 @@ namespace MultiModelChat
                 MessageBox.Show("请输入问题内容", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
+            
+            // 保存到历史记录
+            SaveToHistory(question);
             
             try
             {
@@ -286,11 +306,62 @@ namespace MultiModelChat
             }
         }
 
+        // 历史按钮点击事件
+        private void HistoryButton_Click(object sender, EventArgs e)
+        {
+            using (var historyForm = new HistoryForm())
+            {
+                if (historyForm.ShowDialog() == DialogResult.OK)
+                {
+                    searchTextBox.Text = historyForm.SelectedQuestion;
+                    searchTextBox.Focus();
+                }
+            }
+        }
+        
         // 清除按钮点击事件
         private void ClearButton_Click(object sender, EventArgs e)
         {
             searchTextBox.Clear();
             searchTextBox.Focus();
+        }
+        
+        // 保存到历史记录
+        private void SaveToHistory(string question)
+        {
+            try
+            {
+                List<HistoryItem> historyItems = new List<HistoryItem>();
+                
+                // 读取现有历史记录
+                if (File.Exists(historyFilePath))
+                {
+                    string json = File.ReadAllText(historyFilePath);
+                    historyItems = JsonSerializer.Deserialize<List<HistoryItem>>(json) ?? new List<HistoryItem>();
+                }
+                
+                // 添加新记录
+                historyItems.Add(new HistoryItem
+                {
+                    Question = question,
+                    Timestamp = DateTime.Now
+                });
+                
+                // 限制历史记录数量，只保留最近100条
+                if (historyItems.Count > 100)
+                {
+                    historyItems = historyItems.Skip(historyItems.Count - 100).ToList();
+                }
+                
+                // 保存到文件
+                string jsonToSave = JsonSerializer.Serialize(historyItems, new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(historyFilePath, jsonToSave);
+            }
+            catch (Exception ex)
+            {
+                // 历史记录保存失败不影响主要功能，只记录日志
+                Console.WriteLine($"保存历史记录失败: {ex.Message}");
+            }
         }
 
         // 切换展开状态
@@ -566,19 +637,32 @@ namespace MultiModelChat
         {
             base.OnResize(e);
             // 窗口大小改变时重新调整布局
-            if (bottomPanel != null && tongyiBrowser != null && doubaoBrowser != null)
+            if (bottomPanel != null && tongyiBrowser != null && doubaoBrowser != null && topPanel != null)
             {
-                // 调整输入框大小为窗口宽度的80%
-                searchTextBox.Size = new Size((int)(this.Width * 0.8) - 150, 30);
+                // 调整输入框大小
+                searchTextBox.Width = this.Width - 40;
                 
-                // 调整按钮位置
-                searchButton.Location = new Point(searchTextBox.Right + 10, 30);
-                clearButton.Location = new Point(searchButton.Right + 10, 30);
-                configButton.Location = new Point(clearButton.Right + 10, 30);
+                // 调整按钮面板大小和位置
+                foreach (Control control in topPanel.Controls)
+                {
+                    if (control is Panel)
+                    {
+                        control.Width = this.Width - 40;
+                    }
+                }
                 
-                // 调整展开按钮位置
-                doubaoExpandButton.Location = new Point(tongyiExpandButton.Right + 10, 65);
-                deepseekExpandButton.Location = new Point(doubaoExpandButton.Right + 10, 65);
+                // 调整所有按钮位置 - 全部放在同一个面板中
+                if (topPanel.Controls.Count > 0 && topPanel.Controls[0] is Panel buttonPanel)
+                {
+                    Button[] allButtons = { searchButton, clearButton, configButton, historyButton, 
+                                           tongyiExpandButton, doubaoExpandButton, deepseekExpandButton };
+                    int x = 0;
+                    foreach (var button in allButtons)
+                    {
+                        button.Location = new Point(x, 5);
+                        x += button.Width + 10;
+                    }
+                }
                 
                 // 如果当前不是展开状态，则调整浏览器宽度
                 if (currentExpandState == ExpandState.None)
