@@ -2,34 +2,35 @@ using System;
 using System.Drawing;
 using System.Windows.Forms;
 using System.IO;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace MultiModelChat
 {
     public partial class ConfigForm : Form
     {
         private WebViewConfig config;
-        private TextBox tongyiUrlTextBox;
-        private TextBox doubaoUrlTextBox;
-        private TextBox deepseekUrlTextBox;
+        private DataGridView dataGridView;
         private Button saveButton;
         private Button cancelButton;
+        private Button addButton;
+        private Button deleteButton;
 
         public ConfigForm(WebViewConfig config)
         {
             this.config = config;
             InitializeComponent();
-            LoadConfig();
+            LoadConfigData();
         }
 
         private void InitializeComponent()
         {
-            // 设置窗体属性
-            this.Text = "配置 WebView URL";
-            this.Size = new Size(500, 250);
+            this.Text = LanguageManager.Get("ConfigTitle");
+            this.Size = new Size(700, 500);
             this.StartPosition = FormStartPosition.CenterParent;
-            this.FormBorderStyle = FormBorderStyle.FixedDialog;
-            this.MaximizeBox = false;
+            this.FormBorderStyle = FormBorderStyle.Sizable;
             this.MinimizeBox = false;
+            this.BackColor = Color.White;
 
             // 设置窗体图标
             string iconPath = Path.Combine(Application.StartupPath, "img", "favicon.ico");
@@ -38,98 +39,142 @@ namespace MultiModelChat
                 this.Icon = new Icon(iconPath);
             }
 
-            // 创建标签和文本框
-            Label tongyiLabel = new Label();
-            tongyiLabel.Text = "通义千问 URL:";
-            tongyiLabel.Location = new Point(20, 20);
-            tongyiLabel.Size = new Size(100, 20);
+            // 创建 DataGridView
+            dataGridView = new DataGridView();
+            dataGridView.Dock = DockStyle.Top;
+            dataGridView.Height = 380;
+            dataGridView.AllowUserToAddRows = false;
+            dataGridView.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+            dataGridView.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+            dataGridView.MultiSelect = false;
+            dataGridView.BackgroundColor = Color.White;
+            dataGridView.BorderStyle = BorderStyle.None;
+            dataGridView.RowHeadersVisible = false;
+            dataGridView.DefaultCellStyle.SelectionBackColor = Color.FromArgb(230, 247, 255);
+            dataGridView.DefaultCellStyle.SelectionForeColor = Color.Black;
+            dataGridView.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(250, 250, 250);
+            dataGridView.ColumnHeadersDefaultCellStyle.Font = new Font("微软雅黑", 10, FontStyle.Bold);
+            dataGridView.EnableHeadersVisualStyles = false;
 
-            tongyiUrlTextBox = new TextBox();
-            tongyiUrlTextBox.Location = new Point(130, 20);
-            tongyiUrlTextBox.Size = new Size(330, 20);
+            // 添加列
+            var selectColumn = new DataGridViewCheckBoxColumn();
+            selectColumn.Name = "IsSelected";
+            selectColumn.HeaderText = LanguageManager.Get("ColEnabled");
+            selectColumn.Width = 50;
+            selectColumn.FillWeight = 10;
+            dataGridView.Columns.Add(selectColumn);
 
-            Label doubaoLabel = new Label();
-            doubaoLabel.Text = "豆包 URL:";
-            doubaoLabel.Location = new Point(20, 60);
-            doubaoLabel.Size = new Size(100, 20);
+            var nameColumn = new DataGridViewTextBoxColumn();
+            nameColumn.Name = "Name";
+            nameColumn.HeaderText = LanguageManager.Get("ColName");
+            nameColumn.FillWeight = 30;
+            dataGridView.Columns.Add(nameColumn);
 
-            doubaoUrlTextBox = new TextBox();
-            doubaoUrlTextBox.Location = new Point(130, 60);
-            doubaoUrlTextBox.Size = new Size(330, 20);
+            var urlColumn = new DataGridViewTextBoxColumn();
+            urlColumn.Name = "Url";
+            urlColumn.HeaderText = LanguageManager.Get("ColUrl");
+            urlColumn.FillWeight = 60;
+            dataGridView.Columns.Add(urlColumn);
 
-            Label deepseekLabel = new Label();
-            deepseekLabel.Text = "DeepSeek URL:";
-            deepseekLabel.Location = new Point(20, 100);
-            deepseekLabel.Size = new Size(100, 20);
+            // 按钮面板
+            Panel buttonPanel = new Panel();
+            buttonPanel.Dock = DockStyle.Fill;
+            buttonPanel.BackColor = Color.FromArgb(250, 251, 252);
 
-            deepseekUrlTextBox = new TextBox();
-            deepseekUrlTextBox.Location = new Point(130, 100);
-            deepseekUrlTextBox.Size = new Size(330, 20);
+            addButton = CreateStyledButton(LanguageManager.Get("BtnAdd"), Color.FromArgb(82, 196, 26));
+            addButton.Location = new Point(20, 10);
+            addButton.Click += (s, e) => {
+                dataGridView.Rows.Add(false, LanguageManager.Get("MsgNewSite"), "https://");
+            };
 
-            // 创建按钮
-            saveButton = new Button();
-            saveButton.Text = "保存";
-            saveButton.Location = new Point(150, 150);
-            saveButton.Size = new Size(75, 30);
+            deleteButton = CreateStyledButton(LanguageManager.Get("BtnDelete"), Color.FromArgb(255, 77, 79));
+            deleteButton.Location = new Point(130, 10);
+            deleteButton.Click += (s, e) => {
+                if (dataGridView.SelectedRows.Count > 0)
+                {
+                    dataGridView.Rows.Remove(dataGridView.SelectedRows[0]);
+                }
+            };
+
+            saveButton = CreateStyledButton(LanguageManager.Get("BtnSave"), Color.FromArgb(24, 144, 255));
+            saveButton.Location = new Point(450, 10);
             saveButton.Click += SaveButton_Click;
 
-            cancelButton = new Button();
-            cancelButton.Text = "取消";
-            cancelButton.Location = new Point(250, 150);
-            cancelButton.Size = new Size(75, 30);
-            cancelButton.Click += CancelButton_Click;
+            cancelButton = CreateStyledButton(LanguageManager.Get("BtnCancel"), Color.FromArgb(140, 140, 140));
+            cancelButton.Location = new Point(560, 10);
+            cancelButton.Click += (s, e) => this.Close();
 
-            // 添加控件到窗体
-            this.Controls.Add(tongyiLabel);
-            this.Controls.Add(tongyiUrlTextBox);
-            this.Controls.Add(doubaoLabel);
-            this.Controls.Add(doubaoUrlTextBox);
-            this.Controls.Add(deepseekLabel);
-            this.Controls.Add(deepseekUrlTextBox);
-            this.Controls.Add(saveButton);
-            this.Controls.Add(cancelButton);
+            buttonPanel.Controls.Add(addButton);
+            buttonPanel.Controls.Add(deleteButton);
+            buttonPanel.Controls.Add(saveButton);
+            buttonPanel.Controls.Add(cancelButton);
+
+            this.Controls.Add(buttonPanel);
+            this.Controls.Add(dataGridView);
+        }
+        
+        private Button CreateStyledButton(string text, Color backColor)
+        {
+            var btn = new Button();
+            btn.Text = text;
+            btn.Size = new Size(100, 32);
+            btn.Font = new Font("微软雅黑", 9);
+            btn.BackColor = backColor;
+            btn.ForeColor = Color.White;
+            btn.FlatStyle = FlatStyle.Flat;
+            btn.FlatAppearance.BorderSize = 0;
+            btn.Cursor = Cursors.Hand;
+            return btn;
         }
 
-        private void LoadConfig()
+        private void LoadConfigData()
         {
-            tongyiUrlTextBox.Text = config.TongyiUrl;
-            doubaoUrlTextBox.Text = config.DoubaoUrl;
-            deepseekUrlTextBox.Text = config.DeepSeekUrl;
+            dataGridView.Rows.Clear();
+            foreach (var site in config.Sites)
+            {
+                dataGridView.Rows.Add(site.IsSelected, site.Name, site.Url);
+            }
         }
 
         private void SaveButton_Click(object sender, EventArgs e)
         {
-            // 验证URL格式
-            if (!IsValidUrl(tongyiUrlTextBox.Text))
+            int selectedCount = 0;
+            var newSites = new List<WebSiteConfig>();
+
+            foreach (DataGridViewRow row in dataGridView.Rows)
             {
-                MessageBox.Show("通义千问 URL 格式不正确", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return;
+                if (row.IsNewRow) continue;
+
+                bool isSelected = (bool)(row.Cells["IsSelected"].Value ?? false);
+                string name = row.Cells["Name"].Value?.ToString() ?? "";
+                string url = row.Cells["Url"].Value?.ToString() ?? "";
+
+                if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(url)) continue;
+
+                if (!IsValidUrl(url))
+                {
+                    MessageBox.Show($"'{name}' - {LanguageManager.Get("MsgUrlInvalid")}", LanguageManager.Get("MsgError"), MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                if (isSelected) selectedCount++;
+
+                newSites.Add(new WebSiteConfig
+                {
+                    IsSelected = isSelected,
+                    Name = name,
+                    Url = url
+                });
             }
 
-            if (!IsValidUrl(doubaoUrlTextBox.Text))
+            if (selectedCount > 3)
             {
-                MessageBox.Show("豆包 URL 格式不正确", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return;
+                var result = MessageBox.Show(LanguageManager.Get("MsgTooManySites"), LanguageManager.Get("MsgWarning"), MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                if (result == DialogResult.No) return;
             }
 
-            if (!IsValidUrl(deepseekUrlTextBox.Text))
-            {
-                MessageBox.Show("DeepSeek URL 格式不正确", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return;
-            }
-
-            // 保存配置
-            config.TongyiUrl = tongyiUrlTextBox.Text;
-            config.DoubaoUrl = doubaoUrlTextBox.Text;
-            config.DeepSeekUrl = deepseekUrlTextBox.Text;
-
+            config.Sites = newSites;
             this.DialogResult = DialogResult.OK;
-            this.Close();
-        }
-
-        private void CancelButton_Click(object sender, EventArgs e)
-        {
-            this.DialogResult = DialogResult.Cancel;
             this.Close();
         }
 

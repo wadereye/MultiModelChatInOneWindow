@@ -8,37 +8,31 @@ using System.Text.Json;
 
 namespace MultiModelChat
 {
+    public class WebSiteConfig
+    {
+        public bool IsSelected { get; set; }
+        public string Name { get; set; }
+        public string Url { get; set; }
+    }
+
     // 配置类
     public class WebViewConfig
     {
-        public string TongyiUrl { get; set; } = "https://tongyi.aliyun.com/qianwen/";
-        public string DoubaoUrl { get; set; } = "https://www.doubao.com/chat/";
-        public string DeepSeekUrl { get; set; } = "https://chat.deepseek.com/";
+        public System.Collections.Generic.List<WebSiteConfig> Sites { get; set; } = new System.Collections.Generic.List<WebSiteConfig>();
     }
 
     public partial class MainWindow : Form
     {
         private TextBox searchTextBox;
-        private Button searchButton;
-        private Button clearButton;
-        private Button configButton; // 新增配置按钮
-        private Button aboutButton; // 关于按钮
-        private Button historyButton; // 历史记录按钮
-        private Panel buttonPanel; // 顶部按钮面板
+        private MenuStrip menuStrip;
+        private ToolStrip toolStrip;
+        private ToolTip toolTip;
         private Panel inputPanel; // 输入框面板
         private Panel bottomPanel;
-        private Microsoft.Web.WebView2.WinForms.WebView2 tongyiWebView;
-        private Microsoft.Web.WebView2.WinForms.WebView2 doubaoWebView;
-        private Microsoft.Web.WebView2.WinForms.WebView2 deepseekWebView;
-        
-        // 为每个WebView添加独立显示按钮
-        private Button tongyiExpandButton;
-        private Button doubaoExpandButton;
-        private Button deepseekExpandButton;
-        
-        // 记录当前展开状态
-        private enum ExpandState { None, Tongyi, Doubao, Deepseek }
-        private ExpandState currentExpandState = ExpandState.None;
+        private System.Collections.Generic.List<Microsoft.Web.WebView2.WinForms.WebView2> activeWebViews = new System.Collections.Generic.List<Microsoft.Web.WebView2.WinForms.WebView2>();
+        private System.Collections.Generic.List<ToolStripButton> expandToolButtons = new System.Collections.Generic.List<ToolStripButton>();
+        private int currentExpandedIndex = -1; // -1 表示没有展开，0, 1, 2... 表示展开第几个
+
         
         // 配置信息
         private WebViewConfig config = new WebViewConfig();
@@ -47,17 +41,42 @@ namespace MultiModelChat
 
         public MainWindow()
         {
+            LoadConfig(); // 先加载配置
             InitializeComponent();
-            LoadConfig(); // 加载配置
+            
+            // 订阅语言变更事件
+            LanguageManager.LanguageChanged += OnLanguageChanged;
+        }
+        
+        private void OnLanguageChanged()
+        {
+            // 重新创建菜单和工具栏以应用新语言
+            this.Controls.Remove(menuStrip);
+            this.Controls.Remove(toolStrip);
+            CreateMenuStrip();
+            CreateToolStrip();
+            this.Controls.Add(toolStrip);
+            this.Controls.Add(menuStrip);
+            this.MainMenuStrip = menuStrip;
+            
+            // 更新窗体标题
+            this.Text = LanguageManager.Get("AppTitle");
+            
+            // 更新输入框占位符
+            searchTextBox.PlaceholderText = LanguageManager.Get("InputPlaceholder");
+            
+            // 更新展开按钮
+            UpdateExpandToolButtons();
         }
 
         private void InitializeComponent()
         {
             // 设置窗体属性
-            this.Text = "多模型问答系统";
+            this.Text = LanguageManager.Get("AppTitle");
             this.WindowState = FormWindowState.Maximized;
             this.StartPosition = FormStartPosition.CenterScreen;
             this.Size = new Size(1200, 800);
+            this.BackColor = Color.FromArgb(245, 247, 250); // 浅灰蓝背景
             
             // 设置窗体图标
             string iconPath = Path.Combine(Application.StartupPath, "img", "favicon.ico");
@@ -66,8 +85,17 @@ namespace MultiModelChat
                 this.Icon = new Icon(iconPath);
             }
             
-            // 创建顶部按钮面板
-            CreateButtonPanel();
+            // 创建 ToolTip
+            toolTip = new ToolTip();
+            toolTip.AutoPopDelay = 5000;
+            toolTip.InitialDelay = 500;
+            toolTip.ReshowDelay = 200;
+            
+            // 创建菜单栏
+            CreateMenuStrip();
+            
+            // 创建工具栏
+            CreateToolStrip();
             
             // 创建输入框面板
             CreateInputPanel();
@@ -75,95 +103,190 @@ namespace MultiModelChat
             // 创建下面板
             CreateBottomPanel();
             
-            // 添加面板到窗体（注意顺序，从上到下）
+            // 添加控件到窗体（注意顺序，从上到下）
             this.Controls.Add(bottomPanel);
             this.Controls.Add(inputPanel);
-            this.Controls.Add(buttonPanel);
+            this.Controls.Add(toolStrip);
+            this.Controls.Add(menuStrip);
+            this.MainMenuStrip = menuStrip;
         }
 
-        private void CreateButtonPanel()
+        private void CreateMenuStrip()
         {
-            buttonPanel = new Panel();
-            buttonPanel.Dock = DockStyle.Top;
-            buttonPanel.Height = 50;
-            buttonPanel.BackColor = Color.LightGray;
+            menuStrip = new MenuStrip();
+            menuStrip.Font = new Font("微软雅黑", 10);
+            menuStrip.BackColor = Color.White;
+            menuStrip.ForeColor = Color.FromArgb(51, 51, 51);
             
-            int leftMargin = 10;
-            int buttonSpacing = 5;
-            int buttonY = 10;
-            int buttonHeight = 30;
+            // 文件菜单
+            var fileMenu = new ToolStripMenuItem(LanguageManager.Get("MenuFile"));
+            fileMenu.DropDownItems.Add(new ToolStripMenuItem(LanguageManager.Get("MenuConfig"), null, (s, e) => ConfigButton_Click(s, e), Keys.Control | Keys.P));
+            fileMenu.DropDownItems.Add(new ToolStripMenuItem(LanguageManager.Get("MenuHistory"), null, (s, e) => HistoryButton_Click(s, e), Keys.Control | Keys.H));
+            fileMenu.DropDownItems.Add(new ToolStripSeparator());
+            fileMenu.DropDownItems.Add(new ToolStripMenuItem(LanguageManager.Get("MenuExit"), null, (s, e) => this.Close(), Keys.Alt | Keys.F4));
             
-            // 创建查询按钮
-            searchButton = new Button();
-            searchButton.Location = new Point(leftMargin, buttonY);
-            searchButton.Size = new Size(80, buttonHeight);
-            searchButton.Text = "查询";
-            searchButton.Font = new Font("微软雅黑", 10);
-            searchButton.Click += SearchButton_Click;
+            // 操作菜单
+            var actionMenu = new ToolStripMenuItem(LanguageManager.Get("MenuAction"));
+            actionMenu.DropDownItems.Add(new ToolStripMenuItem(LanguageManager.Get("MenuSendQuery"), null, (s, e) => SearchButton_Click(s, e), Keys.Control | Keys.Enter));
+            actionMenu.DropDownItems.Add(new ToolStripMenuItem(LanguageManager.Get("MenuClearInput"), null, (s, e) => ClearButton_Click(s, e), Keys.Control | Keys.L));
+            actionMenu.DropDownItems.Add(new ToolStripSeparator());
+            actionMenu.DropDownItems.Add(new ToolStripMenuItem(LanguageManager.Get("MenuRestoreView"), null, (s, e) => { currentExpandedIndex = -1; UpdateLayout(); UpdateExpandToolButtons(); }));
             
-            // 创建清除按钮
-            clearButton = new Button();
-            clearButton.Location = new Point(searchButton.Right + buttonSpacing, buttonY);
-            clearButton.Size = new Size(80, buttonHeight);
-            clearButton.Text = "清除";
-            clearButton.Font = new Font("微软雅黑", 10);
-            clearButton.Click += ClearButton_Click;
+            // 视图菜单 (展开各个模型)
+            var viewMenu = new ToolStripMenuItem(LanguageManager.Get("MenuView"));
+            viewMenu.Tag = "viewMenu"; // 标记方便后续更新
+            // 展开项会在 UpdateExpandToolButtons 中动态添加
             
-            // 创建配置按钮
-            configButton = new Button();
-            configButton.Location = new Point(clearButton.Right + buttonSpacing, buttonY);
-            configButton.Size = new Size(80, buttonHeight);
-            configButton.Text = "配置";
-            configButton.Font = new Font("微软雅黑", 10);
-            configButton.Click += ConfigButton_Click;
+            // 帮助菜单
+            var helpMenu = new ToolStripMenuItem(LanguageManager.Get("MenuHelp"));
             
-            // 创建展开按钮
-            tongyiExpandButton = new Button();
-            tongyiExpandButton.Text = "展开通义";
-            tongyiExpandButton.Size = new Size(90, buttonHeight);
-            tongyiExpandButton.Location = new Point(configButton.Right + buttonSpacing, buttonY);
-            tongyiExpandButton.Font = new Font("微软雅黑", 10);
-            tongyiExpandButton.Click += (sender, e) => ToggleExpand(ExpandState.Tongyi);
+            // 语言子菜单
+            var langMenu = new ToolStripMenuItem(LanguageManager.Get("MenuLanguage"));
+            var chineseItem = new ToolStripMenuItem("简体中文", null, (s, e) => { LanguageManager.CurrentLanguage = Language.Chinese; });
+            var englishItem = new ToolStripMenuItem("English", null, (s, e) => { LanguageManager.CurrentLanguage = Language.English; });
+            chineseItem.Checked = LanguageManager.CurrentLanguage == Language.Chinese;
+            englishItem.Checked = LanguageManager.CurrentLanguage == Language.English;
+            langMenu.DropDownItems.Add(chineseItem);
+            langMenu.DropDownItems.Add(englishItem);
             
-            doubaoExpandButton = new Button();
-            doubaoExpandButton.Text = "展开豆包";
-            doubaoExpandButton.Size = new Size(90, buttonHeight);
-            doubaoExpandButton.Location = new Point(tongyiExpandButton.Right + buttonSpacing, buttonY);
-            doubaoExpandButton.Font = new Font("微软雅黑", 10);
-            doubaoExpandButton.Click += (sender, e) => ToggleExpand(ExpandState.Doubao);
+            helpMenu.DropDownItems.Add(langMenu);
+            helpMenu.DropDownItems.Add(new ToolStripSeparator());
+            helpMenu.DropDownItems.Add(new ToolStripMenuItem(LanguageManager.Get("MenuAbout"), null, (s, e) => AboutButton_Click(s, e)));
             
-            deepseekExpandButton = new Button();
-            deepseekExpandButton.Text = "展开DS";
-            deepseekExpandButton.Size = new Size(110, buttonHeight);
-            deepseekExpandButton.Location = new Point(doubaoExpandButton.Right + buttonSpacing, buttonY);
-            deepseekExpandButton.Font = new Font("微软雅黑", 10);
-            deepseekExpandButton.Click += (sender, e) => ToggleExpand(ExpandState.Deepseek);
+            menuStrip.Items.Add(fileMenu);
+            menuStrip.Items.Add(actionMenu);
+            menuStrip.Items.Add(viewMenu);
+            menuStrip.Items.Add(helpMenu);
+        }
+
+        private void CreateToolStrip()
+        {
+            toolStrip = new ToolStrip();
+            toolStrip.ImageScalingSize = new Size(20, 20);
+            toolStrip.Font = new Font("微软雅黑", 9);
+            toolStrip.BackColor = Color.White;
+            toolStrip.GripStyle = ToolStripGripStyle.Hidden;
+            toolStrip.Padding = new Padding(8, 4, 8, 4);
+            toolStrip.RenderMode = ToolStripRenderMode.Professional;
             
-            // 创建关于按钮
-            aboutButton = new Button();
-            aboutButton.Text = "关于";
-            aboutButton.Size = new Size(80, buttonHeight);
-            aboutButton.Location = new Point(deepseekExpandButton.Right + buttonSpacing, buttonY);
-            aboutButton.Font = new Font("微软雅黑", 10);
-            aboutButton.Click += AboutButton_Click;
+            // 查询按钮
+            var searchBtn = CreateStyledToolButton(LanguageManager.Get("ToolSearch"), LanguageManager.Get("ToolSearchTip"), "▶", Color.FromArgb(82, 196, 26));
+            searchBtn.Click += SearchButton_Click;
             
-            // 创建历史记录按钮
-            historyButton = new Button();
-            historyButton.Text = "查看历史";
-            historyButton.Size = new Size(90, buttonHeight);
-            historyButton.Location = new Point(aboutButton.Right + buttonSpacing, buttonY);
-            historyButton.Font = new Font("微软雅黑", 10);
-            historyButton.Click += HistoryButton_Click;
+            // 清除按钮
+            var clearBtn = CreateStyledToolButton(LanguageManager.Get("ToolClear"), LanguageManager.Get("ToolClearTip"), "✕", Color.FromArgb(255, 77, 79));
+            clearBtn.Click += ClearButton_Click;
             
-            // 添加控件到按钮面板
-            buttonPanel.Controls.Add(searchButton);
-            buttonPanel.Controls.Add(clearButton);
-            buttonPanel.Controls.Add(configButton);
-            buttonPanel.Controls.Add(tongyiExpandButton);
-            buttonPanel.Controls.Add(doubaoExpandButton);
-            buttonPanel.Controls.Add(deepseekExpandButton);
-            buttonPanel.Controls.Add(aboutButton);
-            buttonPanel.Controls.Add(historyButton);
+            // 配置按钮
+            var configBtn = CreateStyledToolButton(LanguageManager.Get("ToolConfig"), LanguageManager.Get("ToolConfigTip"), "⚙", Color.FromArgb(24, 144, 255));
+            configBtn.Click += ConfigButton_Click;
+            
+            // 历史按钮
+            var historyBtn = CreateStyledToolButton(LanguageManager.Get("ToolHistory"), LanguageManager.Get("ToolHistoryTip"), "☰", Color.FromArgb(114, 46, 209));
+            historyBtn.Click += HistoryButton_Click;
+            
+            // 恢复分栏按钮
+            var restoreBtn = CreateStyledToolButton(LanguageManager.Get("ToolSplit"), LanguageManager.Get("ToolSplitTip"), "▦", Color.FromArgb(250, 173, 20));
+            restoreBtn.Click += (s, e) => { currentExpandedIndex = -1; UpdateLayout(); UpdateExpandToolButtons(); };
+            
+            toolStrip.Items.Add(searchBtn);
+            toolStrip.Items.Add(clearBtn);
+            toolStrip.Items.Add(CreateToolStripSeparator());
+            toolStrip.Items.Add(configBtn);
+            toolStrip.Items.Add(historyBtn);
+            toolStrip.Items.Add(CreateToolStripSeparator());
+            toolStrip.Items.Add(restoreBtn);
+            toolStrip.Items.Add(CreateToolStripSeparator());
+            // 展开按钮会在 UpdateExpandToolButtons 中动态添加
+        }
+        
+        private ToolStripButton CreateStyledToolButton(string text, string tooltip, string icon, Color iconColor)
+        {
+            var btn = new ToolStripButton();
+            btn.Text = text;
+            btn.DisplayStyle = ToolStripItemDisplayStyle.ImageAndText;
+            btn.ToolTipText = tooltip;
+            btn.Margin = new Padding(2, 0, 2, 0);
+            btn.Padding = new Padding(6, 2, 6, 2);
+            btn.AutoSize = true;
+            
+            // 创建简洁的图标
+            using (var bmp = new Bitmap(20, 20))
+            using (var g = Graphics.FromImage(bmp))
+            {
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                g.Clear(Color.Transparent);
+                using (var brush = new SolidBrush(iconColor))
+                {
+                    g.DrawString(icon, new Font("Segoe UI Symbol", 11, FontStyle.Bold), brush, 0, 0);
+                }
+                btn.Image = (Image)bmp.Clone();
+            }
+            
+            return btn;
+        }
+        
+        private ToolStripSeparator CreateToolStripSeparator()
+        {
+            var sep = new ToolStripSeparator();
+            sep.Margin = new Padding(4, 0, 4, 0);
+            return sep;
+        }
+
+        private void UpdateExpandToolButtons()
+        {
+            // 清除旧的展开按钮
+            foreach (var btn in expandToolButtons)
+            {
+                toolStrip.Items.Remove(btn);
+            }
+            expandToolButtons.Clear();
+
+            var selectedSites = config.Sites.FindAll(s => s.IsSelected);
+            for (int i = 0; i < selectedSites.Count; i++)
+            {
+                var site = selectedSites[i];
+                bool isExpanded = (i == currentExpandedIndex);
+                string prefix = isExpanded ? LanguageManager.Get("ToolCollapse") : LanguageManager.Get("ToolExpand");
+                string tooltip = isExpanded ? LanguageManager.Get("ToolCollapseTip") : LanguageManager.Get("ToolExpandTip");
+                Color iconColor = isExpanded ? Color.FromArgb(255, 77, 79) : Color.FromArgb(82, 196, 26);
+                
+                var expandBtn = CreateStyledToolButton(prefix + " " + site.Name, tooltip + " " + site.Name, isExpanded ? "◀" : "▷", iconColor);
+                
+                int index = i;
+                expandBtn.Click += (sender, e) => ToggleExpand(index);
+                
+                toolStrip.Items.Add(expandBtn);
+                expandToolButtons.Add(expandBtn);
+            }
+            
+            // 更新视图菜单
+            UpdateViewMenu(selectedSites);
+        }
+        
+        private void UpdateViewMenu(System.Collections.Generic.List<WebSiteConfig> selectedSites)
+        {
+            foreach (ToolStripMenuItem item in menuStrip.Items)
+            {
+                if (item.Tag != null && item.Tag.ToString() == "viewMenu")
+                {
+                    item.DropDownItems.Clear();
+                    for (int i = 0; i < selectedSites.Count; i++)
+                    {
+                        var site = selectedSites[i];
+                        int index = i;
+                        string prefix = (i == currentExpandedIndex) ? "✓ " : "";
+                        var menuItem = new ToolStripMenuItem(prefix + LanguageManager.Get("MenuExpand") + " " + site.Name, null, (s, e) => ToggleExpand(index));
+                        item.DropDownItems.Add(menuItem);
+                    }
+                    if (selectedSites.Count > 0)
+                    {
+                        item.DropDownItems.Add(new ToolStripSeparator());
+                    }
+                    item.DropDownItems.Add(new ToolStripMenuItem(LanguageManager.Get("MenuRestoreView"), null, (s, e) => { currentExpandedIndex = -1; UpdateLayout(); UpdateExpandToolButtons(); }));
+                    break;
+                }
+            }
         }
 
         private void CreateInputPanel()
@@ -171,18 +294,20 @@ namespace MultiModelChat
             inputPanel = new Panel();
             inputPanel.Dock = DockStyle.Top;
             inputPanel.Height = 80;
-            inputPanel.BackColor = Color.WhiteSmoke;
+            inputPanel.BackColor = Color.FromArgb(250, 251, 252);
+            inputPanel.Padding = new Padding(10);
             
             // 创建多行搜索输入框
             searchTextBox = new TextBox();
             searchTextBox.Location = new Point(10, 10);
             searchTextBox.Size = new Size(this.Width - 30, 60); // 占据面板宽度
             searchTextBox.Font = new Font("微软雅黑", 11);
-            searchTextBox.PlaceholderText = "请输入您的问题...";
+            searchTextBox.PlaceholderText = LanguageManager.Get("InputPlaceholder");
             searchTextBox.Multiline = true; // 设置为多行
             searchTextBox.ScrollBars = ScrollBars.Vertical; // 添加垂直滚动条
             searchTextBox.AcceptsReturn = false; // 禁止回车换行，确保回车触发查询
             searchTextBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right; // 响应式调整
+            searchTextBox.BorderStyle = BorderStyle.FixedSingle;
             
             // 添加键盘事件支持
             searchTextBox.KeyDown += (sender, e) => {
@@ -211,55 +336,89 @@ namespace MultiModelChat
             bottomPanel = new Panel();
             bottomPanel.Dock = DockStyle.Fill;
             
-            // 创建三个WebView控件
-            tongyiWebView = new Microsoft.Web.WebView2.WinForms.WebView2();
-            doubaoWebView = new Microsoft.Web.WebView2.WinForms.WebView2();
-            deepseekWebView = new Microsoft.Web.WebView2.WinForms.WebView2();
-            
-            // 设置WebView属性
-            tongyiWebView.Dock = DockStyle.Left;
-            tongyiWebView.Width = (this.Width / 3) - 10;
-            
-            doubaoWebView.Dock = DockStyle.Left;
-            doubaoWebView.Width = (this.Width / 3) - 10;
-            
-            deepseekWebView.Dock = DockStyle.Fill;
-            
-            // 初始化WebView
-            InitializeWebViews();
-            
-            // 添加WebView到下面板
-            bottomPanel.Controls.Add(deepseekWebView);
-            bottomPanel.Controls.Add(doubaoWebView);
-            bottomPanel.Controls.Add(tongyiWebView);
+            UpdateWebViews();
         }
 
-        private async void InitializeWebViews()
+        private async void UpdateWebViews()
         {
-            try
+            // 清除旧的WebView
+            foreach (var wv in activeWebViews)
             {
-                // 初始化WebView2控件
-                await tongyiWebView.EnsureCoreWebView2Async(null);
-                await doubaoWebView.EnsureCoreWebView2Async(null);
-                await deepseekWebView.EnsureCoreWebView2Async(null);
-                
-                // 导航到配置中的网站
-                tongyiWebView.CoreWebView2.Navigate(config.TongyiUrl);
-                doubaoWebView.CoreWebView2.Navigate(config.DoubaoUrl);
-                deepseekWebView.CoreWebView2.Navigate(config.DeepSeekUrl);
+                bottomPanel.Controls.Remove(wv);
+                wv.Dispose();
             }
-            catch (Exception ex)
+            activeWebViews.Clear();
+
+            var selectedSites = config.Sites.FindAll(s => s.IsSelected);
+            if (selectedSites.Count == 0) return;
+
+            // 限制最多显示3个，但实际可以多开，只是布局会挤
+            // 用户要求“一般最多允许同时打开3个”，这里不对添加做限制，但显示上我们按选中的来
+            
+            for (int i = 0; i < selectedSites.Count; i++)
             {
-                MessageBox.Show($"初始化WebView时出错: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                var site = selectedSites[i];
+                var wv = new Microsoft.Web.WebView2.WinForms.WebView2();
+                wv.Tag = site.Name;
+                activeWebViews.Add(wv);
+                bottomPanel.Controls.Add(wv);
+                
+                try {
+                    await wv.EnsureCoreWebView2Async(null);
+                    wv.CoreWebView2.Navigate(site.Url);
+                } catch (Exception ex) {
+                    MessageBox.Show($"初始化 {site.Name} 时出错: {ex.Message}");
+                }
+            }
+
+            UpdateLayout();
+            UpdateExpandToolButtons();
+        }
+
+        private void UpdateLayout()
+        {
+            int count = activeWebViews.Count;
+            if (count == 0) return;
+
+            if (currentExpandedIndex >= 0 && currentExpandedIndex < count)
+            {
+                // 展开模式
+                for (int i = 0; i < count; i++)
+                {
+                    activeWebViews[i].Visible = (i == currentExpandedIndex);
+                    if (i == currentExpandedIndex)
+                    {
+                        activeWebViews[i].Dock = DockStyle.Fill;
+                    }
+                }
+            }
+            else
+            {
+                // 分栏模式
+                for (int i = 0; i < count; i++)
+                {
+                    activeWebViews[i].Visible = true;
+                    if (i == count - 1)
+                    {
+                        activeWebViews[i].Dock = DockStyle.Fill;
+                    }
+                    else
+                    {
+                        activeWebViews[i].Dock = DockStyle.Left;
+                        activeWebViews[i].Width = bottomPanel.Width / count;
+                    }
+                }
             }
         }
+
+        // InitializeWebViews 被 UpdateWebViews 取代了
 
         private async void SearchButton_Click(object sender, EventArgs e)
         {
             string question = searchTextBox.Text.Trim();
             if (string.IsNullOrEmpty(question))
             {
-                MessageBox.Show("请输入问题内容", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show(LanguageManager.Get("MsgEnterQuestion"), LanguageManager.Get("MsgTip"), MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
             
@@ -268,14 +427,15 @@ namespace MultiModelChat
                 // 保存历史记录
                 SaveHistory(question);
                 
-                // 使用键盘模拟方式向三个模型注入问题
-                await SimulateInputToTongyi(question);
-                await SimulateInputToDoubao(question);
-                await SimulateInputToDeepSeek(question);
+                // 遍历所有激活的WebView并注入问题
+                foreach (var wv in activeWebViews)
+                {
+                    await SimulateInputToWebView(wv, question);
+                }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"发送问题时出错: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"{LanguageManager.Get("MsgError")}: {ex.Message}", LanguageManager.Get("MsgError"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -289,7 +449,7 @@ namespace MultiModelChat
                     // 保存配置
                     SaveConfig();
                     // 重新加载WebView页面
-                    LoadWebViews();
+                    UpdateWebViews();
                 }
             }
         }
@@ -299,12 +459,13 @@ namespace MultiModelChat
         {
             using (var aboutForm = new Form())
             {
-                aboutForm.Text = "关于";
+                aboutForm.Text = LanguageManager.Get("AboutTitle");
                 aboutForm.Size = new Size(400, 250);
                 aboutForm.StartPosition = FormStartPosition.CenterParent;
                 aboutForm.FormBorderStyle = FormBorderStyle.FixedDialog;
                 aboutForm.MaximizeBox = false;
                 aboutForm.MinimizeBox = false;
+                aboutForm.BackColor = Color.White;
                 
                 // 创建标签显示信息
                 var infoLabel = new Label();
@@ -312,17 +473,21 @@ namespace MultiModelChat
                 infoLabel.Size = new Size(360, 150);
                 infoLabel.Location = new Point(20, 20);
                 infoLabel.Font = new Font("微软雅黑", 12);
-                infoLabel.Text = "软件作者：跋涉者\n\n" +
-                               "邮箱：wader129@qq.com\n\n" +
-                               "当前版本：V1.5";
+                infoLabel.Text = LanguageManager.Get("AboutAuthor") + "\n\n" +
+                               LanguageManager.Get("AboutEmail") + "\n\n" +
+                               LanguageManager.Get("AboutVersion");
                 
                 // 创建确定按钮
                 var okButton = new Button();
-                okButton.Text = "确定";
+                okButton.Text = LanguageManager.Get("BtnOK");
                 okButton.Size = new Size(100, 35);
                 okButton.Location = new Point(150, 170);
                 okButton.DialogResult = DialogResult.OK;
                 okButton.Font = new Font("微软雅黑", 10);
+                okButton.BackColor = Color.FromArgb(24, 144, 255);
+                okButton.ForeColor = Color.White;
+                okButton.FlatStyle = FlatStyle.Flat;
+                okButton.FlatAppearance.BorderSize = 0;
                 
                 aboutForm.Controls.Add(infoLabel);
                 aboutForm.Controls.Add(okButton);
@@ -364,6 +529,19 @@ namespace MultiModelChat
                     string json = File.ReadAllText(configFilePath);
                     config = JsonSerializer.Deserialize<WebViewConfig>(json);
                 }
+                
+                // 如果配置为空或者Sites为空，初始化默认值
+                if (config == null || config.Sites == null || config.Sites.Count == 0)
+                {
+                    config = new WebViewConfig();
+                    config.Sites.Add(new WebSiteConfig { IsSelected = true, Name = "通义千问", Url = "https://tongyi.aliyun.com/qianwen/" });
+                    config.Sites.Add(new WebSiteConfig { IsSelected = true, Name = "豆包", Url = "https://www.doubao.com/chat/" });
+                    config.Sites.Add(new WebSiteConfig { IsSelected = true, Name = "DeepSeek", Url = "https://chat.deepseek.com/" });
+                    config.Sites.Add(new WebSiteConfig { IsSelected = false, Name = "Gemini", Url = "https://gemini.google.com/" });
+                    config.Sites.Add(new WebSiteConfig { IsSelected = false, Name = "ChatGPT", Url = "https://chatgpt.com/" });
+                    config.Sites.Add(new WebSiteConfig { IsSelected = false, Name = "Kimi", Url = "https://www.kimi.com/" });
+                    config.Sites.Add(new WebSiteConfig { IsSelected = false, Name = "元宝", Url = "https://yuanbao.tencent.com/" });
+                }
             }
             catch (Exception ex)
             {
@@ -385,20 +563,7 @@ namespace MultiModelChat
             }
         }
 
-        // 重新加载WebView页面
-        private void LoadWebViews()
-        {
-            try
-            {
-                tongyiWebView.CoreWebView2.Navigate(config.TongyiUrl);
-                doubaoWebView.CoreWebView2.Navigate(config.DoubaoUrl);
-                deepseekWebView.CoreWebView2.Navigate(config.DeepSeekUrl);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"重新加载WebView时出错: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-        }
+        // LoadWebViews 被 UpdateWebViews 取代了
 
         // 清除按钮点击事件
         private void ClearButton_Click(object sender, EventArgs e)
@@ -408,109 +573,33 @@ namespace MultiModelChat
         }
 
         // 切换展开状态
-        private void ToggleExpand(ExpandState targetState)
+        private void ToggleExpand(int index)
         {
-            // 如果点击的是当前已展开的窗口，则恢复为三列布局
-            if (currentExpandState == targetState)
+            if (currentExpandedIndex == index)
             {
-                RestoreThreeColumnLayout();
-                currentExpandState = ExpandState.None;
-                
-                // 恢复按钮文字
-                switch (targetState)
-                {
-                    case ExpandState.Tongyi:
-                        tongyiExpandButton.Text = "展开通义";
-                        break;
-                    case ExpandState.Doubao:
-                        doubaoExpandButton.Text = "展开豆包";
-                        break;
-                    case ExpandState.Deepseek:
-                        deepseekExpandButton.Text = "展开DS";
-                        break;
-                }
+                currentExpandedIndex = -1;
             }
             else
             {
-                // 展开指定窗口
-                ExpandSingleWindow(targetState);
-                currentExpandState = targetState;
-                
-                // 更新按钮文字
-                switch (targetState)
-                {
-                    case ExpandState.Tongyi:
-                        tongyiExpandButton.Text = "收缩通义";
-                        break;
-                    case ExpandState.Doubao:
-                        doubaoExpandButton.Text = "收缩豆包";
-                        break;
-                    case ExpandState.Deepseek:
-                        deepseekExpandButton.Text = "收缩DeepSeek";
-                        break;
-                }
+                currentExpandedIndex = index;
             }
+
+            UpdateLayout();
+            UpdateExpandToolButtons();
         }
 
-        // 展开单个窗口
-        private void ExpandSingleWindow(ExpandState state)
-        {
-            // 隐藏所有WebView
-            tongyiWebView.Visible = false;
-            doubaoWebView.Visible = false;
-            deepseekWebView.Visible = false;
-            
-            // 根据状态显示对应的WebView并设置为全屏
-            switch (state)
-            {
-                case ExpandState.Tongyi:
-                    tongyiWebView.Visible = true;
-                    tongyiWebView.Dock = DockStyle.Fill;
-                    break;
-                case ExpandState.Doubao:
-                    doubaoWebView.Visible = true;
-                    doubaoWebView.Dock = DockStyle.Fill;
-                    break;
-                case ExpandState.Deepseek:
-                    deepseekWebView.Visible = true;
-                    deepseekWebView.Dock = DockStyle.Fill;
-                    break;
-            }
-        }
+        // ExpandSingleWindow 和 RestoreThreeColumnLayout 被 UpdateLayout 取代了
 
-        // 恢复三列布局
-        private void RestoreThreeColumnLayout()
-        {
-            // 显示所有WebView
-            tongyiWebView.Visible = true;
-            doubaoWebView.Visible = true;
-            deepseekWebView.Visible = true;
-            
-            // 恢复原始布局
-            tongyiWebView.Dock = DockStyle.Left;
-            tongyiWebView.Width = (this.Width / 3) - 10;
-            
-            doubaoWebView.Dock = DockStyle.Left;
-            doubaoWebView.Width = (this.Width / 3) - 10;
-            
-            deepseekWebView.Dock = DockStyle.Fill;
-        }
-
-        private async Task SimulateInputToTongyi(string question)
+        private async Task SimulateInputToWebView(Microsoft.Web.WebView2.WinForms.WebView2 wv, string question)
         {
             try
             {
-                // 切换到通义千问窗口
-                tongyiWebView.Focus();
-                
-                // 等待窗口获得焦点
+                wv.Focus();
                 await Task.Delay(100);
                 
-                // 通过JavaScript点击输入框区域（假设输入框在页面中央偏下位置）
                 string clickScript = @"
                     (function() {
-                        // 尝试找到输入框并点击
-                        var inputElements = document.querySelectorAll('textarea[placeholder*=""提问""], textarea[aria-label*=""输入""], textarea');
+                        var inputElements = document.querySelectorAll('textarea[placeholder*=""提问""], textarea[aria-label*=""输入""], textarea, div[contenteditable=""true""]');
                         for (var i = 0; i < inputElements.length; i++) {
                             var element = inputElements[i];
                             if (element.offsetHeight > 0 && element.offsetWidth > 0) {
@@ -519,7 +608,6 @@ namespace MultiModelChat
                                 return;
                             }
                         }
-                        // 如果找不到特定输入框，点击页面中央偏下位置
                         var x = window.innerWidth / 2;
                         var y = window.innerHeight - 100;
                         var element = document.elementFromPoint(x, y);
@@ -529,150 +617,18 @@ namespace MultiModelChat
                     })();
                 ";
                 
-                await tongyiWebView.ExecuteScriptAsync(clickScript);
-                
-                // 等待点击生效
+                await wv.ExecuteScriptAsync(clickScript);
                 await Task.Delay(200);
                 
-                // 清空剪贴板并设置新内容
                 Clipboard.SetText(question);
-                
-                // 发送粘贴命令 (Ctrl+V)
                 SendKeys.SendWait("^{v}");
-                
-                // 等待粘贴完成
-                await Task.Delay(100);
-                
-                // 增加延迟确保粘贴完成后再发送回车
                 await Task.Delay(200);
-                
-                // 发送回车键
                 SendKeys.SendWait("{ENTER}");
-                
-                // 再增加一个短延迟，确保回车被处理
                 await Task.Delay(100);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"模拟输入到通义千问时出错: {ex.Message}");
-            }
-        }
-
-        private async Task SimulateInputToDoubao(string question)
-        {
-            try
-            {
-                // 切换到豆包窗口
-                doubaoWebView.Focus();
-                
-                // 等待窗口获得焦点
-                await Task.Delay(100);
-                
-                // 通过JavaScript点击输入框区域
-                string clickScript = @"
-                    (function() {
-                        // 尝试找到输入框并点击
-                        var inputElements = document.querySelectorAll('textarea[placeholder*=""提问""], textarea[contenteditable=""true""], div[contenteditable=""true""]');
-                        for (var i = 0; i < inputElements.length; i++) {
-                            var element = inputElements[i];
-                            if (element.offsetHeight > 0 && element.offsetWidth > 0) {
-                                element.focus();
-                                element.click();
-                                return;
-                            }
-                        }
-                        // 如果找不到特定输入框，点击页面中央偏下位置
-                        var x = window.innerWidth / 2;
-                        var y = window.innerHeight - 100;
-                        var element = document.elementFromPoint(x, y);
-                        if (element) {
-                            element.click();
-                        }
-                    })();
-                ";
-                
-                await doubaoWebView.ExecuteScriptAsync(clickScript);
-                
-                // 等待点击生效
-                await Task.Delay(200);
-                
-                // 清空剪贴板并设置新内容
-                Clipboard.SetText(question);
-                
-                // 发送粘贴命令 (Ctrl+V)
-                SendKeys.SendWait("^{v}");
-                
-                // 等待粘贴完成
-                await Task.Delay(100);
-                
-                // 增加延迟确保粘贴完成后再发送回车
-                await Task.Delay(200);
-                
-                // 发送回车键
-                SendKeys.SendWait("{ENTER}");
-                
-                // 再增加一个短延迟，确保回车被处理
-                await Task.Delay(100);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"模拟输入到豆包时出错: {ex.Message}");
-            }
-        }
-
-        private async Task SimulateInputToDeepSeek(string question)
-        {
-            try
-            {
-                // 切换到DeepSeek窗口
-                deepseekWebView.Focus();
-                
-                // 等待窗口获得焦点
-                await Task.Delay(100);
-                
-                // 通过JavaScript点击输入框区域
-                string clickScript = @"
-                    (function() {
-                        // 尝试找到输入框并点击
-                        var inputElements = document.querySelectorAll('textarea[placeholder*=""提问""], div[contenteditable=""true""], textarea');
-                        for (var i = 0; i < inputElements.length; i++) {
-                            var element = inputElements[i];
-                            if (element.offsetHeight > 0 && element.offsetWidth > 0) {
-                                element.focus();
-                                element.click();
-                                return;
-                            }
-                        }
-                        // 如果找不到特定输入框，点击页面中央偏下位置
-                        var x = window.innerWidth / 2;
-                        var y = window.innerHeight - 100;
-                        var element = document.elementFromPoint(x, y);
-                        if (element) {
-                            element.click();
-                        }
-                    })();
-                ";
-                
-                await deepseekWebView.ExecuteScriptAsync(clickScript);
-                
-                // 等待点击生效
-                await Task.Delay(200);
-                
-                // 清空剪贴板并设置新内容
-                Clipboard.SetText(question);
-                
-                // 发送粘贴命令 (Ctrl+V)
-                SendKeys.SendWait("^{v}");
-                
-                // 等待粘贴完成
-                await Task.Delay(100);
-                
-                // 发送回车键
-                SendKeys.SendWait("{ENTER}");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"模拟输入到DeepSeek时出错: {ex.Message}");
+                Console.WriteLine($"模拟输入到 {wv.Tag} 时出错: {ex.Message}");
             }
         }
 
@@ -680,14 +636,9 @@ namespace MultiModelChat
         {
             base.OnResize(e);
             // 窗口大小改变时重新调整布局
-            if (bottomPanel != null && tongyiWebView != null && doubaoWebView != null)
+            if (bottomPanel != null && activeWebViews != null)
             {
-                // 如果当前不是展开状态，则调整WebView宽度
-                if (currentExpandState == ExpandState.None)
-                {
-                    tongyiWebView.Width = (this.Width / 3) - 10;
-                    doubaoWebView.Width = (this.Width / 3) - 10;
-                }
+                UpdateLayout();
             }
         }
     }
