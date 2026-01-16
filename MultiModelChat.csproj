@@ -7,6 +7,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationIcon>img\favicon.ico</ApplicationIcon>
+    <DefaultItemExcludes>$(DefaultItemExcludes);out\**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>

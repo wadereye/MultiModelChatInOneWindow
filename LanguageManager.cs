@@ -98,6 +98,19 @@ namespace MultiModelChat
             ["MsgUrlInvalid"] = new Dictionary<Language, string> { { Language.Chinese, "URL 格式不正确" }, { Language.English, "Invalid URL format" } },
             ["MsgTooManySites"] = new Dictionary<Language, string> { { Language.Chinese, "您选中了超过3个网页，可能会导致界面非常拥挤，是否继续？" }, { Language.English, "You have selected more than 3 websites, which may cause the interface to be crowded. Continue?" } },
             ["MsgNewSite"] = new Dictionary<Language, string> { { Language.Chinese, "新网页" }, { Language.English, "New Site" } },
+            
+            // 本地搜索相关
+            ["TabNetwork"] = new Dictionary<Language, string> { { Language.Chinese, "网络" }, { Language.English, "Web" } },
+            ["TabLocal"] = new Dictionary<Language, string> { { Language.Chinese, "本地" }, { Language.English, "Local" } },
+            ["ToolLocalSearch"] = new Dictionary<Language, string> { { Language.Chinese, "本地搜索" }, { Language.English, "Local" } },
+            ["ToolLocalSearchTip"] = new Dictionary<Language, string> { { Language.Chinese, "搜索本地文件" }, { Language.English, "Search local files" } },
+            ["ColFileName"] = new Dictionary<Language, string> { { Language.Chinese, "文件名" }, { Language.English, "File Name" } },
+            ["ColFilePath"] = new Dictionary<Language, string> { { Language.Chinese, "文件路径" }, { Language.English, "File Path" } },
+            ["ColFileType"] = new Dictionary<Language, string> { { Language.Chinese, "类型" }, { Language.English, "Type" } },
+            ["MsgSearching"] = new Dictionary<Language, string> { { Language.Chinese, "正在搜索..." }, { Language.English, "Searching..." } },
+            ["MsgNoResults"] = new Dictionary<Language, string> { { Language.Chinese, "未找到匹配的文件" }, { Language.English, "No matching files found" } },
+            ["MsgIndexing"] = new Dictionary<Language, string> { { Language.Chinese, "正在索引文件系统，请稍候..." }, { Language.English, "Indexing file system, please wait..." } },
+            ["MsgResultCount"] = new Dictionary<Language, string> { { Language.Chinese, "找到 {0} 个匹配项" }, { Language.English, "Found {0} matches" } },
         };
 
         public static string Get(string key)

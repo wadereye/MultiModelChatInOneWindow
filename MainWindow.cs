@@ -5,6 +5,10 @@ using Microsoft.Web.WebView2.WinForms;
 using System.Threading.Tasks;
 using System.IO;
 using System.Text.Json;
+using System.Collections.Generic;
+using System.Linq;
+using MultiModelChat.LocalFileSearch;
+using MultiModelChat.LocalFileSearch.Models;
 
 namespace MultiModelChat
 {
@@ -32,6 +36,15 @@ namespace MultiModelChat
         private System.Collections.Generic.List<Microsoft.Web.WebView2.WinForms.WebView2> activeWebViews = new System.Collections.Generic.List<Microsoft.Web.WebView2.WinForms.WebView2>();
         private System.Collections.Generic.List<ToolStripButton> expandToolButtons = new System.Collections.Generic.List<ToolStripButton>();
         private int currentExpandedIndex = -1; // -1 表示没有展开，0, 1, 2... 表示展开第几个
+
+        // 本地搜索相关
+        private TabControl modeTabControl;     // 网络/本地 切换标签
+        private Panel webContentPanel;         // 网络内容面板
+        private Panel localContentPanel;       // 本地内容面板  
+        private DataGridView localResultsGrid; // 本地搜索结果列表
+        private Label localStatusLabel;        // 本地搜索状态标签
+        private bool isLocalMode = false;      // 当前是否为本地模式
+        private List<FileAndDirectoryEntry> allFilesCache = null; // 文件索引缓存
 
         
         // 配置信息
@@ -100,11 +113,15 @@ namespace MultiModelChat
             // 创建输入框面板
             CreateInputPanel();
             
+            // 创建模式切换标签
+            CreateModeTabControl();
+            
             // 创建下面板
             CreateBottomPanel();
             
             // 添加控件到窗体（注意顺序，从上到下）
             this.Controls.Add(bottomPanel);
+            this.Controls.Add(modeTabControl);
             this.Controls.Add(inputPanel);
             this.Controls.Add(toolStrip);
             this.Controls.Add(menuStrip);
@@ -189,6 +206,10 @@ namespace MultiModelChat
             var restoreBtn = CreateStyledToolButton(LanguageManager.Get("ToolSplit"), LanguageManager.Get("ToolSplitTip"), "▦", Color.FromArgb(250, 173, 20));
             restoreBtn.Click += (s, e) => { currentExpandedIndex = -1; UpdateLayout(); UpdateExpandToolButtons(); };
             
+            // 本地搜索按钮
+            var localSearchBtn = CreateStyledToolButton(LanguageManager.Get("ToolLocalSearch"), LanguageManager.Get("ToolLocalSearchTip"), "📁", Color.FromArgb(19, 194, 194));
+            localSearchBtn.Click += LocalSearchButton_Click;
+            
             toolStrip.Items.Add(searchBtn);
             toolStrip.Items.Add(clearBtn);
             toolStrip.Items.Add(CreateToolStripSeparator());
@@ -196,6 +217,7 @@ namespace MultiModelChat
             toolStrip.Items.Add(historyBtn);
             toolStrip.Items.Add(CreateToolStripSeparator());
             toolStrip.Items.Add(restoreBtn);
+            toolStrip.Items.Add(localSearchBtn);
             toolStrip.Items.Add(CreateToolStripSeparator());
             // 展开按钮会在 UpdateExpandToolButtons 中动态添加
         }
@@ -231,6 +253,132 @@ namespace MultiModelChat
             var sep = new ToolStripSeparator();
             sep.Margin = new Padding(4, 0, 4, 0);
             return sep;
+        }
+
+        private void CreateModeTabControl()
+        {
+            modeTabControl = new TabControl();
+            modeTabControl.Dock = DockStyle.Top;
+            modeTabControl.Height = 30;
+            modeTabControl.Font = new Font("微软雅黑", 10, FontStyle.Bold);
+            modeTabControl.Appearance = TabAppearance.FlatButtons;
+            modeTabControl.ItemSize = new Size(80, 26);
+            modeTabControl.SizeMode = TabSizeMode.Fixed;
+            
+            // 网络标签页
+            var webTab = new TabPage(LanguageManager.Get("TabNetwork"));
+            webTab.Tag = "web";
+            webTab.BackColor = Color.FromArgb(245, 247, 250);
+            
+            // 本地标签页
+            var localTab = new TabPage(LanguageManager.Get("TabLocal"));
+            localTab.Tag = "local";
+            localTab.BackColor = Color.FromArgb(245, 247, 250);
+            
+            modeTabControl.TabPages.Add(webTab);
+            modeTabControl.TabPages.Add(localTab);
+            
+            // 标签页切换事件
+            modeTabControl.SelectedIndexChanged += (s, e) =>
+            {
+                isLocalMode = modeTabControl.SelectedIndex == 1;
+                UpdateContentVisibility();
+            };
+        }
+        
+        private void UpdateContentVisibility()
+        {
+            if (isLocalMode)
+            {
+                // 本地模式：隐藏WebView，显示本地搜索结果
+                bottomPanel.Visible = false;
+                if (localContentPanel != null)
+                {
+                    localContentPanel.Visible = true;
+                }
+                else
+                {
+                    CreateLocalContentPanel();
+                }
+            }
+            else
+            {
+                // 网络模式：显示WebView，隐藏本地搜索结果
+                bottomPanel.Visible = true;
+                if (localContentPanel != null)
+                {
+                    localContentPanel.Visible = false;
+                }
+            }
+        }
+        
+        private void CreateLocalContentPanel()
+        {
+            localContentPanel = new Panel();
+            localContentPanel.Dock = DockStyle.Fill;
+            localContentPanel.BackColor = Color.FromArgb(245, 247, 250);
+            
+            // 状态标签
+            localStatusLabel = new Label();
+            localStatusLabel.Dock = DockStyle.Top;
+            localStatusLabel.Height = 30;
+            localStatusLabel.Font = new Font("微软雅黑", 10);
+            localStatusLabel.TextAlign = ContentAlignment.MiddleLeft;
+            localStatusLabel.Padding = new Padding(10, 0, 0, 0);
+            localStatusLabel.BackColor = Color.FromArgb(250, 251, 252);
+            localStatusLabel.Text = LanguageManager.Get("MsgNoResults");
+            
+            // 搜索结果列表
+            localResultsGrid = new DataGridView();
+            localResultsGrid.Dock = DockStyle.Fill;
+            localResultsGrid.Font = new Font("微软雅黑", 10);
+            localResultsGrid.BackgroundColor = Color.White;
+            localResultsGrid.BorderStyle = BorderStyle.None;
+            localResultsGrid.RowHeadersVisible = false;
+            localResultsGrid.AllowUserToAddRows = false;
+            localResultsGrid.AllowUserToDeleteRows = false;
+            localResultsGrid.ReadOnly = true;
+            localResultsGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+            localResultsGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+            localResultsGrid.ColumnHeadersDefaultCellStyle.Font = new Font("微软雅黑", 10, FontStyle.Bold);
+            localResultsGrid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(240, 242, 245);
+            localResultsGrid.ColumnHeadersHeight = 35;
+            localResultsGrid.RowTemplate.Height = 28;
+            localResultsGrid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(250, 251, 252);
+            
+            // 添加列
+            localResultsGrid.Columns.Add("FileName", LanguageManager.Get("ColFileName"));
+            localResultsGrid.Columns.Add("FileType", LanguageManager.Get("ColFileType"));
+            localResultsGrid.Columns.Add("FilePath", LanguageManager.Get("ColFilePath"));
+            localResultsGrid.Columns["FileName"].FillWeight = 30;
+            localResultsGrid.Columns["FileType"].FillWeight = 10;
+            localResultsGrid.Columns["FilePath"].FillWeight = 60;
+            
+            // 双击打开文件/文件夹
+            localResultsGrid.CellDoubleClick += (s, e) =>
+            {
+                if (e.RowIndex >= 0)
+                {
+                    var path = localResultsGrid.Rows[e.RowIndex].Cells["FilePath"].Value?.ToString();
+                    if (!string.IsNullOrEmpty(path) && (File.Exists(path) || Directory.Exists(path)))
+                    {
+                        try
+                        {
+                            System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{path}\"");
+                        }
+                        catch { }
+                    }
+                }
+            };
+            
+            localContentPanel.Controls.Add(localResultsGrid);
+            localContentPanel.Controls.Add(localStatusLabel);
+            
+            // 添加到窗体 - 使用 SendToBack 确保 Fill 面板不会覆盖顶部控件
+            this.Controls.Add(localContentPanel);
+            // Fill 面板应该在 Z 顺序的最底层
+            localContentPanel.SendToBack();
+            bottomPanel.SendToBack();
         }
 
         private void UpdateExpandToolButtons()
@@ -422,20 +570,158 @@ namespace MultiModelChat
                 return;
             }
             
+            // 根据当前模式决定搜索类型
+            if (isLocalMode)
+            {
+                PerformLocalSearch(question);
+            }
+            else
+            {
+                try
+                {
+                    // 保存历史记录
+                    SaveHistory(question);
+                    
+                    // 遍历所有激活的WebView并注入问题
+                    foreach (var wv in activeWebViews)
+                    {
+                        await SimulateInputToWebView(wv, question);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"{LanguageManager.Get("MsgError")}: {ex.Message}", LanguageManager.Get("MsgError"), MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
+        }
+        
+        // 本地搜索按钮点击事件
+        private void LocalSearchButton_Click(object sender, EventArgs e)
+        {
+            // 切换到本地模式
+            isLocalMode = true;
+            modeTabControl.SelectedIndex = 1;
+            UpdateContentVisibility();
+            
+            // 执行本地搜索
+            string keyword = searchTextBox.Text.Trim();
+            PerformLocalSearch(keyword);
+        }
+        
+        // 执行本地文件搜索
+        private async void PerformLocalSearch(string keyword)
+        {
+            // 确保本地内容面板存在
+            if (localContentPanel == null)
+            {
+                CreateLocalContentPanel();
+            }
+            
+            // 确保面板可见
+            localContentPanel.Visible = true;
+            bottomPanel.Visible = false;
+            
+            // 如果关键词为空，提示用户
+            if (string.IsNullOrEmpty(keyword))
+            {
+                localStatusLabel.Text = LanguageManager.Get("MsgEnterQuestion");
+                localResultsGrid.Rows.Clear();
+                return;
+            }
+            
+            localStatusLabel.Text = LanguageManager.Get("MsgSearching");
+            localResultsGrid.Rows.Clear();
+            this.Cursor = Cursors.WaitCursor;
+            Application.DoEvents();
+            
             try
             {
-                // 保存历史记录
-                SaveHistory(question);
-                
-                // 遍历所有激活的WebView并注入问题
-                foreach (var wv in activeWebViews)
+                // 如果缓存为空，先索引文件系统
+                if (allFilesCache == null)
                 {
-                    await SimulateInputToWebView(wv, question);
+                    localStatusLabel.Text = LanguageManager.Get("MsgIndexing");
+                    Application.DoEvents();
+                    
+                    try
+                    {
+                        await Task.Run(() =>
+                        {
+                            allFilesCache = SearchEngine.GetAllFilesAndDirectories();
+                        });
+                    }
+                    catch (Exception indexEx)
+                    {
+                        // 索引失败，可能需要管理员权限
+                        string errorDetails = indexEx.Message;
+                        if (indexEx.InnerException != null)
+                        {
+                            errorDetails += $"\n内部错误: {indexEx.InnerException.Message}";
+                        }
+                        
+                        localStatusLabel.Text = $"{LanguageManager.Get("MsgError")}: {errorDetails}";
+                        this.Cursor = Cursors.Default;
+                        
+                        var result = MessageBox.Show(
+                            $"索引文件系统失败，需要以管理员身份运行程序。\n\n是否立即以管理员身份重新启动？\n\n错误详情: {errorDetails}",
+                            LanguageManager.Get("MsgError"),
+                            MessageBoxButtons.YesNo,
+                            MessageBoxIcon.Question);
+                        
+                        if (result == DialogResult.Yes)
+                        {
+                            RestartAsAdmin();
+                        }
+                        return;
+                    }
+                }
+                
+                // 检查缓存是否成功加载
+                if (allFilesCache == null || allFilesCache.Count == 0)
+                {
+                    localStatusLabel.Text = "未能获取文件索引，请以管理员身份运行程序";
+                    this.Cursor = Cursors.Default;
+                    return;
+                }
+                
+                localStatusLabel.Text = LanguageManager.Get("MsgSearching");
+                Application.DoEvents();
+                
+                // 过滤匹配的文件
+                var results = allFilesCache
+                    .Where(f => f.FileName.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0)
+                    .Take(1000) // 限制显示数量
+                    .ToList();
+                
+                // 显示结果
+                localResultsGrid.Rows.Clear();
+                foreach (var file in results)
+                {
+                    string fileType = file.IsFolder ? "📁" : "📄";
+                    localResultsGrid.Rows.Add(file.FileName, fileType, file.FullFileName);
+                }
+                
+                // 更新状态
+                if (results.Count > 0)
+                {
+                    localStatusLabel.Text = string.Format(LanguageManager.Get("MsgResultCount"), results.Count);
+                }
+                else
+                {
+                    localStatusLabel.Text = LanguageManager.Get("MsgNoResults");
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"{LanguageManager.Get("MsgError")}: {ex.Message}", LanguageManager.Get("MsgError"), MessageBoxButtons.OK, MessageBoxIcon.Error);
+                localStatusLabel.Text = $"{LanguageManager.Get("MsgError")}: {ex.Message}";
+                MessageBox.Show(
+                    $"搜索出错: {ex.Message}",
+                    LanguageManager.Get("MsgError"),
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
+            finally
+            {
+                this.Cursor = Cursors.Default;
             }
         }
 
@@ -639,6 +925,33 @@ namespace MultiModelChat
             if (bottomPanel != null && activeWebViews != null)
             {
                 UpdateLayout();
+            }
+        }
+        
+        // 以管理员身份重新启动程序
+        private void RestartAsAdmin()
+        {
+            try
+            {
+                var startInfo = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = Application.ExecutablePath,
+                    UseShellExecute = true,
+                    Verb = "runas" // 请求管理员权限
+                };
+                
+                System.Diagnostics.Process.Start(startInfo);
+                
+                // 关闭当前程序
+                Application.Exit();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    $"无法以管理员身份启动程序: {ex.Message}",
+                    LanguageManager.Get("MsgError"),
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
             }
         }
     }
