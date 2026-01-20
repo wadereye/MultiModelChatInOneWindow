@@ -111,6 +111,28 @@ namespace MultiModelChat
             ["MsgNoResults"] = new Dictionary<Language, string> { { Language.Chinese, "未找到匹配的文件" }, { Language.English, "No matching files found" } },
             ["MsgIndexing"] = new Dictionary<Language, string> { { Language.Chinese, "正在索引文件系统，请稍候..." }, { Language.English, "Indexing file system, please wait..." } },
             ["MsgResultCount"] = new Dictionary<Language, string> { { Language.Chinese, "找到 {0} 个匹配项" }, { Language.English, "Found {0} matches" } },
+            
+            // 左侧面板相关
+            ["ToggleSidebar"] = new Dictionary<Language, string> { { Language.Chinese, "◀ 收缩" }, { Language.English, "◀ Collapse" } },
+            ["ExpandSidebar"] = new Dictionary<Language, string> { { Language.Chinese, "▶" }, { Language.English, "▶" } },
+            ["SectionNetwork"] = new Dictionary<Language, string> { { Language.Chinese, "网络查询" }, { Language.English, "Web Query" } },
+            ["SectionLocal"] = new Dictionary<Language, string> { { Language.Chinese, "本地搜索" }, { Language.English, "Local Search" } },
+            
+            // 本地搜索选项
+            ["LocalSearchByName"] = new Dictionary<Language, string> { { Language.Chinese, "按名称搜索" }, { Language.English, "Search by Name" } },
+            ["LocalSearchRecent"] = new Dictionary<Language, string> { { Language.Chinese, "最近文件" }, { Language.English, "Recent Files" } },
+            ["LocalSearchByType"] = new Dictionary<Language, string> { { Language.Chinese, "按类型搜索" }, { Language.English, "Search by Type" } },
+            ["LocalSearchAI"] = new Dictionary<Language, string> { { Language.Chinese, "AI 模糊搜索 (即将推出)" }, { Language.English, "AI Fuzzy Search (Coming Soon)" } },
+            ["LocalFileTypes"] = new Dictionary<Language, string> { { Language.Chinese, "文件类型" }, { Language.English, "File Types" } },
+            ["LocalSearchPlaceholder"] = new Dictionary<Language, string> { { Language.Chinese, "输入文件名..." }, { Language.English, "Enter file name..." } },
+            ["TypeAll"] = new Dictionary<Language, string> { { Language.Chinese, "全部" }, { Language.English, "All" } },
+            ["TypeDocuments"] = new Dictionary<Language, string> { { Language.Chinese, "文档" }, { Language.English, "Documents" } },
+            ["TypeImages"] = new Dictionary<Language, string> { { Language.Chinese, "图片" }, { Language.English, "Images" } },
+            ["TypeVideos"] = new Dictionary<Language, string> { { Language.Chinese, "视频" }, { Language.English, "Videos" } },
+            ["TypeAudio"] = new Dictionary<Language, string> { { Language.Chinese, "音频" }, { Language.English, "Audio" } },
+            ["TypeArchives"] = new Dictionary<Language, string> { { Language.Chinese, "压缩包" }, { Language.English, "Archives" } },
+            ["TypeCode"] = new Dictionary<Language, string> { { Language.Chinese, "代码" }, { Language.English, "Code" } },
+            ["BtnSearch"] = new Dictionary<Language, string> { { Language.Chinese, "搜索" }, { Language.English, "Search" } },
         };
 
         public static string Get(string key)
