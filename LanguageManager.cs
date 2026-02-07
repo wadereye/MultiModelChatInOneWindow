@@ -66,6 +66,8 @@ namespace MultiModelChat
             ["ToolCollapse"] = new Dictionary<Language, string> { { Language.Chinese, "收缩" }, { Language.English, "Collapse" } },
             ["ToolExpandTip"] = new Dictionary<Language, string> { { Language.Chinese, "展开到全屏" }, { Language.English, "Expand to fullscreen" } },
             ["ToolCollapseTip"] = new Dictionary<Language, string> { { Language.Chinese, "恢复分栏视图" }, { Language.English, "Restore split view" } },
+            ["ToolCopy"] = new Dictionary<Language, string> { { Language.Chinese, "复制" }, { Language.English, "Copy" } },
+            ["ToolTranslate"] = new Dictionary<Language, string> { { Language.Chinese, "翻译" }, { Language.English, "Translate" } },
             
             // 输入框
             ["InputPlaceholder"] = new Dictionary<Language, string> { { Language.Chinese, "请输入您的问题..." }, { Language.English, "Enter your question..." } },
@@ -99,39 +101,12 @@ namespace MultiModelChat
             ["MsgTooManySites"] = new Dictionary<Language, string> { { Language.Chinese, "您选中了超过3个网页，可能会导致界面非常拥挤，是否继续？" }, { Language.English, "You have selected more than 3 websites, which may cause the interface to be crowded. Continue?" } },
             ["MsgNewSite"] = new Dictionary<Language, string> { { Language.Chinese, "新网页" }, { Language.English, "New Site" } },
             
-            // 本地搜索相关
-            ["TabNetwork"] = new Dictionary<Language, string> { { Language.Chinese, "网络" }, { Language.English, "Web" } },
-            ["TabLocal"] = new Dictionary<Language, string> { { Language.Chinese, "本地" }, { Language.English, "Local" } },
-            ["ToolLocalSearch"] = new Dictionary<Language, string> { { Language.Chinese, "本地搜索" }, { Language.English, "Local" } },
-            ["ToolLocalSearchTip"] = new Dictionary<Language, string> { { Language.Chinese, "搜索本地文件" }, { Language.English, "Search local files" } },
-            ["ColFileName"] = new Dictionary<Language, string> { { Language.Chinese, "文件名" }, { Language.English, "File Name" } },
-            ["ColFilePath"] = new Dictionary<Language, string> { { Language.Chinese, "文件路径" }, { Language.English, "File Path" } },
-            ["ColFileType"] = new Dictionary<Language, string> { { Language.Chinese, "类型" }, { Language.English, "Type" } },
-            ["MsgSearching"] = new Dictionary<Language, string> { { Language.Chinese, "正在搜索..." }, { Language.English, "Searching..." } },
-            ["MsgNoResults"] = new Dictionary<Language, string> { { Language.Chinese, "未找到匹配的文件" }, { Language.English, "No matching files found" } },
-            ["MsgIndexing"] = new Dictionary<Language, string> { { Language.Chinese, "正在索引文件系统，请稍候..." }, { Language.English, "Indexing file system, please wait..." } },
-            ["MsgResultCount"] = new Dictionary<Language, string> { { Language.Chinese, "找到 {0} 个匹配项" }, { Language.English, "Found {0} matches" } },
-            
             // 左侧面板相关
-            ["ToggleSidebar"] = new Dictionary<Language, string> { { Language.Chinese, "◀ 收缩" }, { Language.English, "◀ Collapse" } },
-            ["ExpandSidebar"] = new Dictionary<Language, string> { { Language.Chinese, "▶" }, { Language.English, "▶" } },
+            ["ToggleSidebar"] = new Dictionary<Language, string> { { Language.Chinese, "\u25C0 \u6536\u7f29" }, { Language.English, "\u25C0 Collapse" } },
+            ["ExpandSidebar"] = new Dictionary<Language, string> { { Language.Chinese, "\u25B6" }, { Language.English, "\u25B6" } },
             ["SectionNetwork"] = new Dictionary<Language, string> { { Language.Chinese, "网络查询" }, { Language.English, "Web Query" } },
-            ["SectionLocal"] = new Dictionary<Language, string> { { Language.Chinese, "本地搜索" }, { Language.English, "Local Search" } },
             
-            // 本地搜索选项
-            ["LocalSearchByName"] = new Dictionary<Language, string> { { Language.Chinese, "按名称搜索" }, { Language.English, "Search by Name" } },
-            ["LocalSearchRecent"] = new Dictionary<Language, string> { { Language.Chinese, "最近文件" }, { Language.English, "Recent Files" } },
-            ["LocalSearchByType"] = new Dictionary<Language, string> { { Language.Chinese, "按类型搜索" }, { Language.English, "Search by Type" } },
-            ["LocalSearchAI"] = new Dictionary<Language, string> { { Language.Chinese, "AI 模糊搜索 (即将推出)" }, { Language.English, "AI Fuzzy Search (Coming Soon)" } },
-            ["LocalFileTypes"] = new Dictionary<Language, string> { { Language.Chinese, "文件类型" }, { Language.English, "File Types" } },
-            ["LocalSearchPlaceholder"] = new Dictionary<Language, string> { { Language.Chinese, "输入文件名..." }, { Language.English, "Enter file name..." } },
-            ["TypeAll"] = new Dictionary<Language, string> { { Language.Chinese, "全部" }, { Language.English, "All" } },
-            ["TypeDocuments"] = new Dictionary<Language, string> { { Language.Chinese, "文档" }, { Language.English, "Documents" } },
-            ["TypeImages"] = new Dictionary<Language, string> { { Language.Chinese, "图片" }, { Language.English, "Images" } },
-            ["TypeVideos"] = new Dictionary<Language, string> { { Language.Chinese, "视频" }, { Language.English, "Videos" } },
-            ["TypeAudio"] = new Dictionary<Language, string> { { Language.Chinese, "音频" }, { Language.English, "Audio" } },
-            ["TypeArchives"] = new Dictionary<Language, string> { { Language.Chinese, "压缩包" }, { Language.English, "Archives" } },
-            ["TypeCode"] = new Dictionary<Language, string> { { Language.Chinese, "代码" }, { Language.English, "Code" } },
+            // 搜索相关
             ["BtnSearch"] = new Dictionary<Language, string> { { Language.Chinese, "搜索" }, { Language.English, "Search" } },
         };
 

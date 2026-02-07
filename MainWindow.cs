@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.WinForms;
@@ -7,8 +7,6 @@ using System.IO;
 using System.Text.Json;
 using System.Collections.Generic;
 using System.Linq;
-using MultiModelChat.LocalFileSearch;
-using MultiModelChat.LocalFileSearch.Models;
 
 namespace MultiModelChat
 {
@@ -25,7 +23,7 @@ namespace MultiModelChat
         public System.Collections.Generic.List<WebSiteConfig> Sites { get; set; } = new System.Collections.Generic.List<WebSiteConfig>();
     }
 
-    // 支持双缓冲的 Panel，用于减少拖动时的闪烁
+    // 支持双缓冲的 Panel，用于减少拖动时闪烁
     public class DoubleBufferedPanel : Panel
     {
         public DoubleBufferedPanel()
@@ -40,7 +38,7 @@ namespace MultiModelChat
             this.UpdateStyles();
         }
         
-        // 重写 WndProc 来进一步减少闪烁
+        // 重写 WndProc 进一步减少闪烁
         protected override void OnPaintBackground(PaintEventArgs e)
         {
             // 不绘制背景，由 OnPaint 统一处理
@@ -62,9 +60,9 @@ namespace MultiModelChat
         private MenuStrip menuStrip;
         private Panel mainContentPanel;  // 主内容面板（全屏）
         private Panel floatingSidebarPanel;  // 浮动侧边栏
-        private Button toggleSidebarBtn;  // 浮动的切换按钮
+        private Button toggleSidebarBtn;  // 侧边栏切换按钮
         
-        // 左侧面板 - 网络查询区域
+        // 侧边栏 - 网络查询区域
         private Panel networkSectionPanel;
         private Button networkSectionHeader;
         private Panel networkSectionContent;
@@ -72,32 +70,16 @@ namespace MultiModelChat
         private TextBox searchTextBox;
         private System.Collections.Generic.List<ToolStripButton> expandToolButtons = new System.Collections.Generic.List<ToolStripButton>();
         
-        // 左侧面板 - 本地搜索区域
-        private Panel localSectionPanel;
-        private Button localSectionHeader;
-        private Panel localSectionContent;
-        private TextBox localSearchTextBox;
-        private ComboBox fileTypeComboBox;
-        private Button searchByNameBtn;
-        private Button searchRecentBtn;
-        private Button searchByTypeBtn;
-        private Button searchAIBtn;
-        
-        // 右侧内容区域
+        // 右侧主内容区
         private Panel bottomPanel; // WebView容器
-        private Panel localContentPanel; // 本地搜索结果面板
-        private DataGridView localResultsGrid;
-        private Label localStatusLabel;
         
         // WebView相关
         private System.Collections.Generic.List<Microsoft.Web.WebView2.WinForms.WebView2> activeWebViews = new System.Collections.Generic.List<Microsoft.Web.WebView2.WinForms.WebView2>();
+        private HashSet<int> initializedWebViewIndices = new HashSet<int>(); // 追踪已初始化的WebView索引
         private int currentExpandedIndex = -1;
         
         // 状态变量
-        private bool isLocalMode = false;
         private bool isNetworkSectionExpanded = true;
-        private bool isLocalSectionExpanded = false;
-        private List<FileAndDirectoryEntry> allFilesCache = null;
         
         // 拖拽相关变量
         private bool isDraggingBtn = false;
@@ -107,7 +89,7 @@ namespace MultiModelChat
         private Size resizeStartSize;
         private Point resizeStartPos;
         private Panel sidebarTitleBar;  // 侧边栏标题栏（用于拖拽）
-        private Panel resizeGrip;  // 调整大小的手柄
+        private Panel resizeGrip;  // 调整大小手柄
         
         // 配置信息
         private WebViewConfig config = new WebViewConfig();
@@ -116,7 +98,7 @@ namespace MultiModelChat
         
         // 常量
         private const int SIDEBAR_WIDTH = 320;
-        private const int SIDEBAR_HEIGHT = 500;
+        private const int SIDEBAR_HEIGHT = 400;
 
         public MainWindow()
         {
@@ -135,17 +117,13 @@ namespace MultiModelChat
             this.Controls.Add(menuStrip);
             this.MainMenuStrip = menuStrip;
             
-            // 更新左侧面板标题
+            // 更新区块标题
             if (networkSectionHeader != null)
-                networkSectionHeader.Text = (isNetworkSectionExpanded ? "▼ " : "▶ ") + LanguageManager.Get("SectionNetwork");
-            if (localSectionHeader != null)
-                localSectionHeader.Text = (isLocalSectionExpanded ? "▼ " : "▶ ") + LanguageManager.Get("SectionLocal");
+                networkSectionHeader.Text = (isNetworkSectionExpanded ? "\u25BC " : "\u25B6 ") + LanguageManager.Get("SectionNetwork");
             
             // 更新输入框
             if (searchTextBox != null)
                 searchTextBox.PlaceholderText = LanguageManager.Get("InputPlaceholder");
-            if (localSearchTextBox != null)
-                localSearchTextBox.PlaceholderText = LanguageManager.Get("LocalSearchPlaceholder");
             
             // 更新工具栏
             UpdateNetworkToolStrip();
@@ -160,7 +138,7 @@ namespace MultiModelChat
             this.Size = new Size(1200, 800);
             this.BackColor = Color.FromArgb(245, 247, 250);
             
-            // 开启双缓冲减少闪烁
+            // 启用双缓冲减少闪烁
             this.DoubleBuffered = true;
             this.SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true);
             
@@ -173,7 +151,7 @@ namespace MultiModelChat
             // 创建菜单栏
             CreateMenuStrip();
             
-            // 创建主布局（内容区域 + 浮动侧边栏 + 浮动按钮）
+            // 创建主要布局（主内容区 + 浮动侧边栏 + 切换按钮）
             CreateMainLayout();
             
             // 添加控件（注意顺序，后添加的在上层）
@@ -216,7 +194,7 @@ namespace MultiModelChat
             // 帮助菜单
             var helpMenu = new ToolStripMenuItem(LanguageManager.Get("MenuHelp"));
             var langMenu = new ToolStripMenuItem(LanguageManager.Get("MenuLanguage"));
-            var chineseItem = new ToolStripMenuItem("简体中文", null, (s, e) => { LanguageManager.CurrentLanguage = Language.Chinese; });
+            var chineseItem = new ToolStripMenuItem("中文", null, (s, e) => { LanguageManager.CurrentLanguage = Language.Chinese; });
             var englishItem = new ToolStripMenuItem("English", null, (s, e) => { LanguageManager.CurrentLanguage = Language.English; });
             chineseItem.Checked = LanguageManager.CurrentLanguage == Language.Chinese;
             englishItem.Checked = LanguageManager.CurrentLanguage == Language.English;
@@ -234,7 +212,7 @@ namespace MultiModelChat
 
         private void CreateMainLayout()
         {
-            // 1. 创建主内容面板（全屏，在最底层）
+            // 1. 创建主内容面板（全屏，包含底部）
             mainContentPanel = new Panel();
             mainContentPanel.Dock = DockStyle.Fill;
             mainContentPanel.BackColor = Color.FromArgb(245, 247, 250);
@@ -244,39 +222,65 @@ namespace MultiModelChat
             bottomPanel.Dock = DockStyle.Fill;
             bottomPanel.BackColor = Color.White;
             
-            // 本地搜索结果面板
-            CreateLocalResultsPanel();
-            
-            mainContentPanel.Controls.Add(localContentPanel);
             mainContentPanel.Controls.Add(bottomPanel);
             
-            // 初始化WebViews
-            UpdateWebViews();
-            
-            // 2. 创建浮动切换按钮（可拖动）
+            // 2. 创建侧边栏切换按钮（可拖动）
             toggleSidebarBtn = new Button();
-            toggleSidebarBtn.Size = new Size(40, 40);
+            toggleSidebarBtn.Size = new Size(48, 48);
             toggleSidebarBtn.Location = new Point(15, 40);
-            toggleSidebarBtn.Text = "☰";
-            toggleSidebarBtn.TextAlign = ContentAlignment.MiddleCenter;
+            toggleSidebarBtn.Text = "";
             toggleSidebarBtn.FlatStyle = FlatStyle.Flat;
             toggleSidebarBtn.FlatAppearance.BorderSize = 0;
-            toggleSidebarBtn.FlatAppearance.MouseOverBackColor = Color.FromArgb(200, 24, 144, 255);
-            toggleSidebarBtn.FlatAppearance.MouseDownBackColor = Color.FromArgb(240, 24, 144, 255);
-            toggleSidebarBtn.BackColor = Color.FromArgb(180, 24, 144, 255);
-            toggleSidebarBtn.ForeColor = Color.White;
-            toggleSidebarBtn.Font = new Font("Segoe UI Symbol", 16, FontStyle.Bold);
-            toggleSidebarBtn.Cursor = Cursors.SizeAll;  // 显示拖动光标
+            toggleSidebarBtn.FlatAppearance.MouseOverBackColor = Color.Transparent;
+            toggleSidebarBtn.FlatAppearance.MouseDownBackColor = Color.Transparent;
+            toggleSidebarBtn.BackColor = Color.Transparent;
+            toggleSidebarBtn.Cursor = Cursors.SizeAll;
+            
+            // 创建圆形区域
+            var path = new System.Drawing.Drawing2D.GraphicsPath();
+            path.AddEllipse(0, 0, 48, 48);
+            toggleSidebarBtn.Region = new Region(path);
+
+            // 自定义绘制浮动图标
+            toggleSidebarBtn.Paint += (s, e) =>
+            {
+                var g = e.Graphics;
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
+                
+                // 绘制渐变背景
+                using (var brush = new System.Drawing.Drawing2D.LinearGradientBrush(
+                    toggleSidebarBtn.ClientRectangle,
+                    Color.FromArgb(24, 144, 255),
+                    Color.FromArgb(0, 100, 200),
+                    45f))
+                {
+                    g.FillEllipse(brush, 0, 0, 47, 47);
+                }
+                
+                // 绘制图标 (三条横线，类似汉堡菜单)
+                using (var pen = new Pen(Color.White, 3))
+                {
+                    pen.StartCap = System.Drawing.Drawing2D.LineCap.Round;
+                    pen.EndCap = System.Drawing.Drawing2D.LineCap.Round;
+                    
+                    int centerX = toggleSidebarBtn.Width / 2;
+                    int centerY = toggleSidebarBtn.Height / 2;
+                    
+                    g.DrawLine(pen, centerX - 10, centerY - 6, centerX + 10, centerY - 6);
+                    g.DrawLine(pen, centerX - 10, centerY, centerX + 10, centerY);
+                    g.DrawLine(pen, centerX - 10, centerY + 6, centerX + 10, centerY + 6);
+                }
+            };
             
             // 按钮拖拽事件
-            Point panelOffset = new Point(0, 0);  // 面板相对于按钮的偏移
+            Point panelOffset = new Point(0, 0);  // 面板相对按钮的偏移
             toggleSidebarBtn.MouseDown += (s, e) =>
             {
                 if (e.Button == MouseButtons.Left)
                 {
                     isDraggingBtn = true;
                     dragOffset = e.Location;
-                    // 记录面板相对于按钮的位置
+                    // 记录面板相对按钮的位置
                     if (floatingSidebarPanel != null && floatingSidebarPanel.Visible)
                     {
                         panelOffset = new Point(
@@ -297,8 +301,6 @@ namespace MultiModelChat
                     newLocation.X = Math.Max(0, Math.Min(this.ClientSize.Width - toggleSidebarBtn.Width, newLocation.X));
                     newLocation.Y = Math.Max(25, Math.Min(this.ClientSize.Height - toggleSidebarBtn.Height, newLocation.Y));
                     
-                    // 使用 SuspendLayout 减少闪烁
-                    this.SuspendLayout();
                     toggleSidebarBtn.Location = newLocation;
                     
                     // 如果面板可见，同时移动面板
@@ -308,12 +310,12 @@ namespace MultiModelChat
                             newLocation.X + panelOffset.X,
                             newLocation.Y + panelOffset.Y
                         );
-                        // 面板也限制在窗口范围内
+                        // 确保面板不会超出窗口范围
                         panelLocation.X = Math.Max(0, Math.Min(this.ClientSize.Width - 100, panelLocation.X));
                         panelLocation.Y = Math.Max(25, Math.Min(this.ClientSize.Height - 100, panelLocation.Y));
                         floatingSidebarPanel.Location = panelLocation;
                     }
-                    this.ResumeLayout();
+                    this.Update();
                 }
             };
             toggleSidebarBtn.MouseUp += (s, e) =>
@@ -321,7 +323,7 @@ namespace MultiModelChat
                 if (isDraggingBtn && e.Button == MouseButtons.Left)
                 {
                     isDraggingBtn = false;
-                    // 检查是否是点击（而不是拖动）
+                    // 判断是否是单击松开还是拖动后
                     if (Math.Abs(e.X - dragOffset.X) < 5 && Math.Abs(e.Y - dragOffset.Y) < 5)
                     {
                         ToggleSidebar_Click(s, e);
@@ -334,6 +336,9 @@ namespace MultiModelChat
             
             // 3. 创建浮动侧边栏面板
             CreateFloatingSidebar();
+            
+            // 初始化WebViews（延迟加载优化）
+            UpdateWebViews();
         }
 
         private void CreateFloatingSidebar()
@@ -347,26 +352,26 @@ namespace MultiModelChat
             floatingSidebarPanel.Visible = false;
             floatingSidebarPanel.Padding = new Padding(0);
             
-            // 添加明显的边框效果
+            // 添加圆角的边框效果
             floatingSidebarPanel.Paint += (s, e) =>
             {
                 var rect = floatingSidebarPanel.ClientRectangle;
                 var g = e.Graphics;
                 
-                // 绘制外层阴影效果
+                // 绘制简单阴影效果
                 using (var shadowPen = new Pen(Color.FromArgb(30, 0, 0, 0), 4))
                 {
                     g.DrawRectangle(shadowPen, new Rectangle(2, 2, rect.Width - 4, rect.Height - 4));
                 }
                 
-                // 绘制主边框
+                // 绘制边框
                 using (var borderPen = new Pen(Color.FromArgb(24, 144, 255), 2))
                 {
                     g.DrawRectangle(borderPen, new Rectangle(0, 0, rect.Width - 1, rect.Height - 1));
                 }
             };
             
-            // 创建标题栏（可拖拽区域）- 使用双缓冲面板
+            // 添加标题栏（用于拖拽）- 使用双缓冲面板
             sidebarTitleBar = new DoubleBufferedPanel();
             sidebarTitleBar.Dock = DockStyle.Top;
             sidebarTitleBar.Height = 32;
@@ -375,7 +380,7 @@ namespace MultiModelChat
             
             // 标题文字
             var titleLabel = new Label();
-            titleLabel.Text = "⚡ " + LanguageManager.Get("ToggleSidebar");
+            titleLabel.Text = LanguageManager.Get("ToggleSidebar");
             titleLabel.ForeColor = Color.White;
             titleLabel.Font = new Font("微软雅黑", 10, FontStyle.Bold);
             titleLabel.AutoSize = false;
@@ -384,8 +389,8 @@ namespace MultiModelChat
             titleLabel.TextAlign = ContentAlignment.MiddleLeft;
             titleLabel.Cursor = Cursors.SizeAll;
             
-            // 标题栏拖拽事件
-            Point btnOffset = new Point(0, 0);  // 图标相对于面板的偏移
+            // 添加标题栏拖拽事件
+            Point btnOffset = new Point(0, 0);  // 图标相对面板的偏移
             EventHandler<MouseEventArgs> titleMouseDown = (s, e) =>
             {
                 if (e.Button == MouseButtons.Left)
@@ -397,7 +402,7 @@ namespace MultiModelChat
                         dragOffset.X += titleLabel.Location.X;
                         dragOffset.Y += titleLabel.Location.Y;
                     }
-                    // 记录图标相对于面板的位置
+                    // 记录图标相对面板的位置
                     btnOffset = new Point(
                         toggleSidebarBtn.Location.X - floatingSidebarPanel.Location.X,
                         toggleSidebarBtn.Location.Y - floatingSidebarPanel.Location.Y
@@ -421,8 +426,6 @@ namespace MultiModelChat
                     newLocation.X = Math.Max(0, Math.Min(this.ClientSize.Width - 100, newLocation.X));
                     newLocation.Y = Math.Max(25, Math.Min(this.ClientSize.Height - 100, newLocation.Y));
                     
-                    // 使用 SuspendLayout 减少闪烁
-                    this.SuspendLayout();
                     floatingSidebarPanel.Location = newLocation;
                     
                     // 同时移动图标
@@ -433,7 +436,7 @@ namespace MultiModelChat
                     btnLocation.X = Math.Max(0, Math.Min(this.ClientSize.Width - toggleSidebarBtn.Width, btnLocation.X));
                     btnLocation.Y = Math.Max(25, Math.Min(this.ClientSize.Height - toggleSidebarBtn.Height, btnLocation.Y));
                     toggleSidebarBtn.Location = btnLocation;
-                    this.ResumeLayout();
+                    this.Update();
                 }
             };
             EventHandler<MouseEventArgs> titleMouseUp = (s, e) =>
@@ -448,11 +451,11 @@ namespace MultiModelChat
             titleLabel.MouseMove += (s, e) => titleMouseMove(s, e);
             titleLabel.MouseUp += (s, e) => titleMouseUp(s, e);
             
-            // 关闭按钮（标题栏右侧）
+            // 关闭按钮（放在最右边）
             var closeBtn = new Button();
             closeBtn.Size = new Size(28, 28);
             closeBtn.Location = new Point(SIDEBAR_WIDTH - 32, 2);
-            closeBtn.Text = "✕";
+            closeBtn.Text = "×";
             closeBtn.TextAlign = ContentAlignment.MiddleCenter;
             closeBtn.FlatStyle = FlatStyle.Flat;
             closeBtn.FlatAppearance.BorderSize = 0;
@@ -467,20 +470,20 @@ namespace MultiModelChat
             sidebarTitleBar.Controls.Add(closeBtn);
             closeBtn.BringToFront();
             
-            // 创建调整大小的手柄（右下角）
+            // 添加调整大小手柄（右下角）
             resizeGrip = new Panel();
             resizeGrip.Size = new Size(16, 16);
             resizeGrip.BackColor = Color.Transparent;
             resizeGrip.Cursor = Cursors.SizeNWSE;
             resizeGrip.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
             
-            // 绘制调整大小的图案
+            // 绘制调整大小图标
             resizeGrip.Paint += (s, e) =>
             {
                 var g = e.Graphics;
                 using (var brush = new SolidBrush(Color.FromArgb(150, 120, 120, 120)))
                 {
-                    // 绘制斜线图案
+                    // 绘制斜线图标
                     g.FillPolygon(brush, new Point[] {
                         new Point(16, 4),
                         new Point(16, 16),
@@ -512,7 +515,7 @@ namespace MultiModelChat
                     int newWidth = resizeStartSize.Width + (currentPos.X - resizeStartPos.X);
                     int newHeight = resizeStartSize.Height + (currentPos.Y - resizeStartPos.Y);
                     
-                    // 限制最小和最大尺寸
+                    // 设置最小和最大尺寸
                     newWidth = Math.Max(280, Math.Min(600, newWidth));
                     newHeight = Math.Max(300, Math.Min(800, newHeight));
                     
@@ -527,7 +530,7 @@ namespace MultiModelChat
                 isResizingPanel = false;
             };
             
-            // 内容面板（放置网络和本地搜索区域）- 使用双缓冲面板
+            // 内容面板（包含工具栏和搜索框） 使用双缓冲面板
             var contentPanel = new DoubleBufferedPanel();
             contentPanel.Dock = DockStyle.Fill;
             contentPanel.BackColor = Color.FromArgb(250, 251, 253);
@@ -537,14 +540,10 @@ namespace MultiModelChat
             // 网络查询区域
             CreateNetworkSection();
             
-            // 本地搜索区域
-            CreateLocalSection();
-            
             // 添加控件到内容面板
-            contentPanel.Controls.Add(localSectionPanel);
             contentPanel.Controls.Add(networkSectionPanel);
             
-            // 添加所有控件到侧边栏
+            // 添加所有控件到浮动面板
             floatingSidebarPanel.Controls.Add(resizeGrip);
             floatingSidebarPanel.Controls.Add(contentPanel);
             floatingSidebarPanel.Controls.Add(sidebarTitleBar);
@@ -565,7 +564,7 @@ namespace MultiModelChat
             networkSectionPanel.Height = 260;
             networkSectionPanel.BackColor = Color.FromArgb(250, 251, 252);
             
-            // 区域标题
+            // 区块标题
             networkSectionHeader = new Button();
             networkSectionHeader.Dock = DockStyle.Top;
             networkSectionHeader.Height = 36;
@@ -580,7 +579,7 @@ namespace MultiModelChat
             networkSectionHeader.Cursor = Cursors.Hand;
             networkSectionHeader.Click += (s, e) => ToggleNetworkSection();
             
-            // 区域内容
+            // 区块内容
             networkSectionContent = new Panel();
             networkSectionContent.Dock = DockStyle.Fill;
             networkSectionContent.Padding = new Padding(8);
@@ -637,26 +636,36 @@ namespace MultiModelChat
             expandToolButtons.Clear();
             
             // 查询按钮
-            var searchBtn = CreateCompactToolButton(LanguageManager.Get("ToolSearch"), "▶", Color.FromArgb(82, 196, 26));
+            var searchBtn = CreateCompactToolButton(LanguageManager.Get("ToolSearch"), "🔍", Color.FromArgb(82, 196, 26));
             searchBtn.Click += SearchButton_Click;
             
+            // 复制按钮
+            var copyBtn = CreateCompactToolButton(LanguageManager.Get("ToolCopy"), "📋", Color.FromArgb(22, 119, 255));
+            copyBtn.Click += CopyButton_Click;
+
+            // 翻译按钮
+            var translateBtn = CreateCompactToolButton(LanguageManager.Get("ToolTranslate"), "文", Color.FromArgb(114, 46, 209));
+            translateBtn.Click += TranslateButton_Click;
+            
             // 清除按钮
-            var clearBtn = CreateCompactToolButton(LanguageManager.Get("ToolClear"), "✕", Color.FromArgb(255, 77, 79));
+            var clearBtn = CreateCompactToolButton(LanguageManager.Get("ToolClear"), "🗑️", Color.FromArgb(255, 77, 79));
             clearBtn.Click += ClearButton_Click;
             
             // 配置按钮
-            var configBtn = CreateCompactToolButton(LanguageManager.Get("ToolConfig"), "⚙", Color.FromArgb(24, 144, 255));
+            var configBtn = CreateCompactToolButton(LanguageManager.Get("ToolConfig"), "⚙️", Color.FromArgb(24, 144, 255));
             configBtn.Click += ConfigButton_Click;
             
             // 历史按钮
-            var historyBtn = CreateCompactToolButton(LanguageManager.Get("ToolHistory"), "☰", Color.FromArgb(114, 46, 209));
+            var historyBtn = CreateCompactToolButton(LanguageManager.Get("ToolHistory"), "🕒", Color.FromArgb(114, 46, 209));
             historyBtn.Click += HistoryButton_Click;
             
             // 恢复分栏按钮
-            var restoreBtn = CreateCompactToolButton(LanguageManager.Get("ToolSplit"), "▦", Color.FromArgb(250, 173, 20));
+            var restoreBtn = CreateCompactToolButton(LanguageManager.Get("ToolSplit"), "🪟", Color.FromArgb(250, 173, 20));
             restoreBtn.Click += (s, e) => { currentExpandedIndex = -1; UpdateWebViewLayout(); UpdateExpandToolButtons(); };
             
             networkToolStrip.Items.Add(searchBtn);
+            networkToolStrip.Items.Add(copyBtn);
+            networkToolStrip.Items.Add(translateBtn);
             networkToolStrip.Items.Add(clearBtn);
             networkToolStrip.Items.Add(new ToolStripSeparator());
             networkToolStrip.Items.Add(configBtn);
@@ -689,135 +698,6 @@ namespace MultiModelChat
             return btn;
         }
 
-        private void CreateLocalSection()
-        {
-            localSectionPanel = new Panel();
-            localSectionPanel.Dock = DockStyle.Top;
-            localSectionPanel.Height = 36; // 折叠状态只显示标题
-            localSectionPanel.BackColor = Color.FromArgb(250, 251, 252);
-            
-            // 区域标题
-            localSectionHeader = new Button();
-            localSectionHeader.Dock = DockStyle.Top;
-            localSectionHeader.Height = 36;
-            localSectionHeader.Text = "▶ " + LanguageManager.Get("SectionLocal");
-            localSectionHeader.TextAlign = ContentAlignment.MiddleLeft;
-            localSectionHeader.Padding = new Padding(8, 0, 0, 0);
-            localSectionHeader.FlatStyle = FlatStyle.Flat;
-            localSectionHeader.FlatAppearance.BorderSize = 0;
-            localSectionHeader.BackColor = Color.FromArgb(19, 194, 194);
-            localSectionHeader.ForeColor = Color.White;
-            localSectionHeader.Font = new Font("微软雅黑", 10, FontStyle.Bold);
-            localSectionHeader.Cursor = Cursors.Hand;
-            localSectionHeader.Click += (s, e) => ToggleLocalSection();
-            
-            // 区域内容
-            localSectionContent = new Panel();
-            localSectionContent.Dock = DockStyle.Fill;
-            localSectionContent.Padding = new Padding(8);
-            localSectionContent.BackColor = Color.FromArgb(250, 251, 252);
-            localSectionContent.Visible = false;
-            
-            // 本地搜索输入框
-            localSearchTextBox = new TextBox();
-            localSearchTextBox.Dock = DockStyle.Top;
-            localSearchTextBox.Height = 28;
-            localSearchTextBox.Font = new Font("微软雅黑", 10);
-            localSearchTextBox.PlaceholderText = LanguageManager.Get("LocalSearchPlaceholder");
-            localSearchTextBox.BorderStyle = BorderStyle.FixedSingle;
-            localSearchTextBox.KeyDown += (s, e) => {
-                if (e.KeyCode == Keys.Enter)
-                {
-                    PerformLocalSearchByName(localSearchTextBox.Text.Trim());
-                    e.Handled = true;
-                    e.SuppressKeyPress = true;
-                }
-            };
-            
-            // 文件类型选择
-            var typePanel = new Panel();
-            typePanel.Dock = DockStyle.Top;
-            typePanel.Height = 32;
-            typePanel.Padding = new Padding(0, 4, 0, 0);
-            
-            var typeLabel = new Label();
-            typeLabel.Text = LanguageManager.Get("LocalFileTypes") + ":";
-            typeLabel.AutoSize = true;
-            typeLabel.Location = new Point(0, 8);
-            typeLabel.Font = new Font("微软雅黑", 9);
-            
-            fileTypeComboBox = new ComboBox();
-            fileTypeComboBox.Location = new Point(70, 4);
-            fileTypeComboBox.Size = new Size(180, 24);
-            fileTypeComboBox.Font = new Font("微软雅黑", 9);
-            fileTypeComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
-            fileTypeComboBox.Items.AddRange(new string[] {
-                LanguageManager.Get("TypeAll"),
-                LanguageManager.Get("TypeDocuments"),
-                LanguageManager.Get("TypeImages"),
-                LanguageManager.Get("TypeVideos"),
-                LanguageManager.Get("TypeAudio"),
-                LanguageManager.Get("TypeArchives"),
-                LanguageManager.Get("TypeCode")
-            });
-            fileTypeComboBox.SelectedIndex = 0;
-            
-            typePanel.Controls.Add(fileTypeComboBox);
-            typePanel.Controls.Add(typeLabel);
-            
-            // 搜索按钮面板
-            var buttonsPanel = new FlowLayoutPanel();
-            buttonsPanel.Dock = DockStyle.Top;
-            buttonsPanel.Height = 120;
-            buttonsPanel.FlowDirection = FlowDirection.TopDown;
-            buttonsPanel.Padding = new Padding(0, 8, 0, 0);
-            buttonsPanel.WrapContents = false;
-            
-            searchByNameBtn = CreateLocalActionButton(LanguageManager.Get("LocalSearchByName"), "🔍");
-            searchByNameBtn.Click += (s, e) => PerformLocalSearchByName(localSearchTextBox.Text.Trim());
-            
-            searchRecentBtn = CreateLocalActionButton(LanguageManager.Get("LocalSearchRecent"), "🕐");
-            searchRecentBtn.Click += (s, e) => PerformLocalSearchRecent();
-            
-            searchByTypeBtn = CreateLocalActionButton(LanguageManager.Get("LocalSearchByType"), "📂");
-            searchByTypeBtn.Click += (s, e) => PerformLocalSearchByType();
-            
-            searchAIBtn = CreateLocalActionButton(LanguageManager.Get("LocalSearchAI"), "🤖");
-            searchAIBtn.Enabled = false; // 即将推出
-            searchAIBtn.ForeColor = Color.Gray;
-            
-            buttonsPanel.Controls.Add(searchByNameBtn);
-            buttonsPanel.Controls.Add(searchRecentBtn);
-            buttonsPanel.Controls.Add(searchByTypeBtn);
-            buttonsPanel.Controls.Add(searchAIBtn);
-            
-            // 添加控件（注意顺序）
-            localSectionContent.Controls.Add(buttonsPanel);
-            localSectionContent.Controls.Add(typePanel);
-            localSectionContent.Controls.Add(localSearchTextBox);
-            
-            localSectionPanel.Controls.Add(localSectionContent);
-            localSectionPanel.Controls.Add(localSectionHeader);
-        }
-
-        private Button CreateLocalActionButton(string text, string icon)
-        {
-            var btn = new Button();
-            btn.Size = new Size(240, 26);
-            btn.Text = icon + " " + text;
-            btn.TextAlign = ContentAlignment.MiddleLeft;
-            btn.Padding = new Padding(8, 0, 0, 0);
-            btn.FlatStyle = FlatStyle.Flat;
-            btn.FlatAppearance.BorderSize = 1;
-            btn.FlatAppearance.BorderColor = Color.FromArgb(220, 220, 220);
-            btn.BackColor = Color.White;
-            btn.ForeColor = Color.FromArgb(51, 51, 51);
-            btn.Font = new Font("微软雅黑", 9);
-            btn.Cursor = Cursors.Hand;
-            btn.Margin = new Padding(0, 0, 0, 4);
-            return btn;
-        }
-
         private void ToggleNetworkSection()
         {
             isNetworkSectionExpanded = !isNetworkSectionExpanded;
@@ -836,29 +716,7 @@ namespace MultiModelChat
                 networkSectionContent.Visible = false;
                 networkSectionHeader.Text = "▶ " + LanguageManager.Get("SectionNetwork");
             }
-            // 调整外部面板高度
-            AdjustSidebarPanelHeight(heightDiff);
-        }
-
-        private void ToggleLocalSection()
-        {
-            isLocalSectionExpanded = !isLocalSectionExpanded;
-            int heightDiff = 0;
-            if (isLocalSectionExpanded)
-            {
-                heightDiff = 240 - localSectionPanel.Height;
-                localSectionPanel.Height = 240;
-                localSectionContent.Visible = true;
-                localSectionHeader.Text = "▼ " + LanguageManager.Get("SectionLocal");
-            }
-            else
-            {
-                heightDiff = 36 - localSectionPanel.Height;
-                localSectionPanel.Height = 36;
-                localSectionContent.Visible = false;
-                localSectionHeader.Text = "▶ " + LanguageManager.Get("SectionLocal");
-            }
-            // 调整外部面板高度
+            // 调整侧边栏高度
             AdjustSidebarPanelHeight(heightDiff);
         }
         
@@ -868,10 +726,10 @@ namespace MultiModelChat
             
             // 计算新高度
             int newHeight = floatingSidebarPanel.Height + heightDiff;
-            // 限制最小和最大高度
+            // 设置最小和最大高度
             newHeight = Math.Max(150, Math.Min(800, newHeight));
             
-            // 确保不超出窗口底部
+            // 确保面板不会超出底部
             if (floatingSidebarPanel.Location.Y + newHeight > this.ClientSize.Height - 10)
             {
                 newHeight = this.ClientSize.Height - floatingSidebarPanel.Location.Y - 10;
@@ -886,90 +744,29 @@ namespace MultiModelChat
             floatingSidebarPanel.Visible = !floatingSidebarPanel.Visible;
             if (floatingSidebarPanel.Visible)
             {
-                // 将面板放置在图标旁边
+                // 将面板放在图标旁边
                 var panelX = toggleSidebarBtn.Location.X + toggleSidebarBtn.Width + 5;
                 var panelY = toggleSidebarBtn.Location.Y;
                 
-                // 如果面板超出右边界，放到图标左边
+                // 如果面板超出右边界，放到图标左侧
                 if (panelX + floatingSidebarPanel.Width > this.ClientSize.Width)
                 {
                     panelX = toggleSidebarBtn.Location.X - floatingSidebarPanel.Width - 5;
                 }
                 
-                // 确保不超出底部
+                // 确保面板不会超出底部
                 if (panelY + floatingSidebarPanel.Height > this.ClientSize.Height)
                 {
                     panelY = this.ClientSize.Height - floatingSidebarPanel.Height - 10;
                 }
                 
-                // 确保不超出顶部
+                // 确保面板不会超出顶部
                 panelY = Math.Max(25, panelY);
                 panelX = Math.Max(0, panelX);
                 
                 floatingSidebarPanel.Location = new Point(panelX, panelY);
                 floatingSidebarPanel.BringToFront();
             }
-        }
-
-
-        private void CreateLocalResultsPanel()
-        {
-            localContentPanel = new Panel();
-            localContentPanel.Dock = DockStyle.Fill;
-            localContentPanel.BackColor = Color.FromArgb(245, 247, 250);
-            localContentPanel.Visible = false;
-            
-            localStatusLabel = new Label();
-            localStatusLabel.Dock = DockStyle.Top;
-            localStatusLabel.Height = 30;
-            localStatusLabel.Font = new Font("微软雅黑", 10);
-            localStatusLabel.TextAlign = ContentAlignment.MiddleLeft;
-            localStatusLabel.Padding = new Padding(10, 0, 0, 0);
-            localStatusLabel.BackColor = Color.FromArgb(250, 251, 252);
-            localStatusLabel.Text = LanguageManager.Get("MsgNoResults");
-            
-            localResultsGrid = new DataGridView();
-            localResultsGrid.Dock = DockStyle.Fill;
-            localResultsGrid.Font = new Font("微软雅黑", 10);
-            localResultsGrid.BackgroundColor = Color.White;
-            localResultsGrid.BorderStyle = BorderStyle.None;
-            localResultsGrid.RowHeadersVisible = false;
-            localResultsGrid.AllowUserToAddRows = false;
-            localResultsGrid.AllowUserToDeleteRows = false;
-            localResultsGrid.ReadOnly = true;
-            localResultsGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-            localResultsGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-            localResultsGrid.ColumnHeadersDefaultCellStyle.Font = new Font("微软雅黑", 10, FontStyle.Bold);
-            localResultsGrid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(240, 242, 245);
-            localResultsGrid.ColumnHeadersHeight = 35;
-            localResultsGrid.RowTemplate.Height = 28;
-            localResultsGrid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(250, 251, 252);
-            
-            localResultsGrid.Columns.Add("FileName", LanguageManager.Get("ColFileName"));
-            localResultsGrid.Columns.Add("FileType", LanguageManager.Get("ColFileType"));
-            localResultsGrid.Columns.Add("FilePath", LanguageManager.Get("ColFilePath"));
-            localResultsGrid.Columns["FileName"].FillWeight = 30;
-            localResultsGrid.Columns["FileType"].FillWeight = 10;
-            localResultsGrid.Columns["FilePath"].FillWeight = 60;
-            
-            localResultsGrid.CellDoubleClick += (s, e) =>
-            {
-                if (e.RowIndex >= 0)
-                {
-                    var path = localResultsGrid.Rows[e.RowIndex].Cells["FilePath"].Value?.ToString();
-                    if (!string.IsNullOrEmpty(path) && (File.Exists(path) || Directory.Exists(path)))
-                    {
-                        try
-                        {
-                            System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{path}\"");
-                        }
-                        catch { }
-                    }
-                }
-            };
-            
-            localContentPanel.Controls.Add(localResultsGrid);
-            localContentPanel.Controls.Add(localStatusLabel);
         }
 
         private void UpdateExpandToolButtons()
@@ -985,7 +782,7 @@ namespace MultiModelChat
             {
                 var site = selectedSites[i];
                 bool isExpanded = (i == currentExpandedIndex);
-                string prefix = isExpanded ? "◀" : "▷";
+                string prefix = isExpanded ? "\u25C0" : "\u25B7";
                 string tooltip = isExpanded ? LanguageManager.Get("ToolCollapseTip") : LanguageManager.Get("ToolExpandTip");
                 Color iconColor = isExpanded ? Color.FromArgb(255, 77, 79) : Color.FromArgb(82, 196, 26);
                 
@@ -1013,7 +810,7 @@ namespace MultiModelChat
                     {
                         var site = selectedSites[i];
                         int index = i;
-                        string prefix = (i == currentExpandedIndex) ? "✓ " : "";
+                        string prefix = (i == currentExpandedIndex) ? "▼ " : "";
                         var menuItem = new ToolStripMenuItem(prefix + LanguageManager.Get("MenuExpand") + " " + site.Name, null, (s, e) => ToggleExpand(index));
                         item.DropDownItems.Add(menuItem);
                     }
@@ -1027,7 +824,11 @@ namespace MultiModelChat
             }
         }
 
-        private async void UpdateWebViews()
+        /// <summary>
+        /// 更新WebViews - 采用延迟加载策略优化内存和CPU使用
+        /// 只创建WebView控件，但不立即初始化内核
+        /// </summary>
+        private void UpdateWebViews()
         {
             foreach (var wv in activeWebViews)
             {
@@ -1035,10 +836,12 @@ namespace MultiModelChat
                 wv.Dispose();
             }
             activeWebViews.Clear();
+            initializedWebViewIndices.Clear();
 
             var selectedSites = config.Sites.FindAll(s => s.IsSelected);
             if (selectedSites.Count == 0) return;
 
+            // 只创建WebView控件，不初始化内核
             for (int i = 0; i < selectedSites.Count; i++)
             {
                 var site = selectedSites[i];
@@ -1051,21 +854,59 @@ namespace MultiModelChat
             {
                 bottomPanel.Controls.Add(activeWebViews[i]);
             }
-            
-            for (int i = 0; i < selectedSites.Count; i++)
-            {
-                var site = selectedSites[i];
-                var wv = activeWebViews[i];
-                try {
-                    await wv.EnsureCoreWebView2Async(null);
-                    wv.CoreWebView2.Navigate(site.Url);
-                } catch (Exception ex) {
-                    MessageBox.Show($"初始化 {site.Name} 时出错: {ex.Message}");
-                }
-            }
 
             UpdateWebViewLayout();
             UpdateExpandToolButtons();
+            
+            // 延迟初始化第一个可见的WebView
+            InitializeVisibleWebViewsAsync();
+        }
+        
+        /// <summary>
+        /// 异步初始化当前可见的WebView
+        /// 只初始化可见的WebView，其他的在需要时再初始化
+        /// </summary>
+        private async void InitializeVisibleWebViewsAsync()
+        {
+            var selectedSites = config.Sites.FindAll(s => s.IsSelected);
+            if (selectedSites.Count == 0) return;
+            
+            // 如果有展开的视图，只初始化那个
+            if (currentExpandedIndex >= 0 && currentExpandedIndex < selectedSites.Count)
+            {
+                await InitializeWebViewIfNeeded(currentExpandedIndex, selectedSites[currentExpandedIndex]);
+            }
+            else
+            {
+                // 分栏模式：逐个初始化，减少同时加载的压力
+                for (int i = 0; i < selectedSites.Count; i++)
+                {
+                    await InitializeWebViewIfNeeded(i, selectedSites[i]);
+                    // 给UI一些时间响应
+                    await Task.Delay(100);
+                }
+            }
+        }
+        
+        /// <summary>
+        /// 按需初始化单个WebView
+        /// </summary>
+        private async Task InitializeWebViewIfNeeded(int index, WebSiteConfig site)
+        {
+            if (index < 0 || index >= activeWebViews.Count) return;
+            if (initializedWebViewIndices.Contains(index)) return; // 已初始化
+            
+            var wv = activeWebViews[index];
+            try
+            {
+                await wv.EnsureCoreWebView2Async(null);
+                wv.CoreWebView2.Navigate(site.Url);
+                initializedWebViewIndices.Add(index);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"初始化 {site.Name} 时出错: {ex.Message}");
+            }
         }
 
         private void UpdateWebViewLayout()
@@ -1102,6 +943,24 @@ namespace MultiModelChat
             }
         }
 
+        private void CopyButton_Click(object sender, EventArgs e)
+        {
+            if (!string.IsNullOrEmpty(searchTextBox.Text))
+            {
+                Clipboard.SetText(searchTextBox.Text);
+            }
+        }
+
+        private void TranslateButton_Click(object sender, EventArgs e)
+        {
+            if (!string.IsNullOrEmpty(searchTextBox.Text))
+            {
+                searchTextBox.Text = "翻译以下内容为中文:\r\n" + searchTextBox.Text;
+                SearchButton_Click(sender, e);
+            }
+        }
+
+
         private async void SearchButton_Click(object sender, EventArgs e)
         {
             string question = searchTextBox.Text.Trim();
@@ -1111,10 +970,12 @@ namespace MultiModelChat
                 return;
             }
             
-            // 切换到网络模式
-            isLocalMode = false;
-            bottomPanel.Visible = true;
-            localContentPanel.Visible = false;
+            // 确保所有WebView都已初始化
+            var selectedSites = config.Sites.FindAll(s => s.IsSelected);
+            for (int i = 0; i < selectedSites.Count; i++)
+            {
+                await InitializeWebViewIfNeeded(i, selectedSites[i]);
+            }
             
             try
             {
@@ -1127,210 +988,6 @@ namespace MultiModelChat
             catch (Exception ex)
             {
                 MessageBox.Show($"{LanguageManager.Get("MsgError")}: {ex.Message}", LanguageManager.Get("MsgError"), MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-        }
-        
-        private void LocalSearchButton_Click(object sender, EventArgs e)
-        {
-            // 展开本地搜索区域
-            if (!isLocalSectionExpanded)
-            {
-                ToggleLocalSection();
-            }
-            
-            // 切换到本地模式
-            isLocalMode = true;
-            bottomPanel.Visible = false;
-            localContentPanel.Visible = true;
-            
-            // 聚焦到本地搜索输入框
-            localSearchTextBox.Focus();
-        }
-        
-        private async void PerformLocalSearchByName(string keyword)
-        {
-            isLocalMode = true;
-            bottomPanel.Visible = false;
-            localContentPanel.Visible = true;
-            
-            if (string.IsNullOrEmpty(keyword))
-            {
-                localStatusLabel.Text = LanguageManager.Get("MsgEnterQuestion");
-                localResultsGrid.Rows.Clear();
-                return;
-            }
-            
-            await PerformLocalSearch(keyword, null);
-        }
-        
-        private async void PerformLocalSearchRecent()
-        {
-            isLocalMode = true;
-            bottomPanel.Visible = false;
-            localContentPanel.Visible = true;
-            
-            localStatusLabel.Text = LanguageManager.Get("MsgSearching");
-            localResultsGrid.Rows.Clear();
-            this.Cursor = Cursors.WaitCursor;
-            
-            try
-            {
-                if (allFilesCache == null)
-                {
-                    localStatusLabel.Text = LanguageManager.Get("MsgIndexing");
-                    Application.DoEvents();
-                    
-                    await Task.Run(() =>
-                    {
-                        allFilesCache = SearchEngine.GetAllFilesAndDirectories();
-                    });
-                }
-                
-                if (allFilesCache == null || allFilesCache.Count == 0)
-                {
-                    localStatusLabel.Text = "未能获取文件索引";
-                    this.Cursor = Cursors.Default;
-                    return;
-                }
-                
-                // 获取最近的文件（简化实现，实际应该根据修改时间排序）
-                var results = allFilesCache
-                    .Where(f => !f.IsFolder)
-                    .Take(100)
-                    .ToList();
-                
-                DisplaySearchResults(results);
-            }
-            catch (Exception ex)
-            {
-                localStatusLabel.Text = $"{LanguageManager.Get("MsgError")}: {ex.Message}";
-            }
-            finally
-            {
-                this.Cursor = Cursors.Default;
-            }
-        }
-        
-        private async void PerformLocalSearchByType()
-        {
-            isLocalMode = true;
-            bottomPanel.Visible = false;
-            localContentPanel.Visible = true;
-            
-            int typeIndex = fileTypeComboBox.SelectedIndex;
-            string[] extensions = typeIndex switch
-            {
-                1 => new[] { ".doc", ".docx", ".pdf", ".txt", ".xls", ".xlsx", ".ppt", ".pptx" }, // 文档
-                2 => new[] { ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".svg" }, // 图片
-                3 => new[] { ".mp4", ".avi", ".mkv", ".mov", ".wmv", ".flv" }, // 视频
-                4 => new[] { ".mp3", ".wav", ".flac", ".aac", ".ogg", ".wma" }, // 音频
-                5 => new[] { ".zip", ".rar", ".7z", ".tar", ".gz" }, // 压缩包
-                6 => new[] { ".cs", ".js", ".ts", ".py", ".java", ".cpp", ".c", ".h", ".html", ".css" }, // 代码
-                _ => null
-            };
-            
-            await PerformLocalSearch(localSearchTextBox.Text.Trim(), extensions);
-        }
-        
-        private async Task PerformLocalSearch(string keyword, string[] extensions)
-        {
-            localStatusLabel.Text = LanguageManager.Get("MsgSearching");
-            localResultsGrid.Rows.Clear();
-            this.Cursor = Cursors.WaitCursor;
-            Application.DoEvents();
-            
-            try
-            {
-                if (allFilesCache == null)
-                {
-                    localStatusLabel.Text = LanguageManager.Get("MsgIndexing");
-                    Application.DoEvents();
-                    
-                    try
-                    {
-                        await Task.Run(() =>
-                        {
-                            allFilesCache = SearchEngine.GetAllFilesAndDirectories();
-                        });
-                    }
-                    catch (Exception indexEx)
-                    {
-                        string errorDetails = indexEx.Message;
-                        if (indexEx.InnerException != null)
-                        {
-                            errorDetails += $"\n内部错误: {indexEx.InnerException.Message}";
-                        }
-                        
-                        localStatusLabel.Text = $"{LanguageManager.Get("MsgError")}: {errorDetails}";
-                        this.Cursor = Cursors.Default;
-                        
-                        var result = MessageBox.Show(
-                            $"索引文件系统失败，需要以管理员身份运行程序。\n\n是否立即以管理员身份重新启动？\n\n错误详情: {errorDetails}",
-                            LanguageManager.Get("MsgError"),
-                            MessageBoxButtons.YesNo,
-                            MessageBoxIcon.Question);
-                        
-                        if (result == DialogResult.Yes)
-                        {
-                            RestartAsAdmin();
-                        }
-                        return;
-                    }
-                }
-                
-                if (allFilesCache == null || allFilesCache.Count == 0)
-                {
-                    localStatusLabel.Text = "未能获取文件索引，请以管理员身份运行程序";
-                    this.Cursor = Cursors.Default;
-                    return;
-                }
-                
-                localStatusLabel.Text = LanguageManager.Get("MsgSearching");
-                Application.DoEvents();
-                
-                var query = allFilesCache.AsEnumerable();
-                
-                if (!string.IsNullOrEmpty(keyword))
-                {
-                    query = query.Where(f => f.FileName.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0);
-                }
-                
-                if (extensions != null && extensions.Length > 0)
-                {
-                    query = query.Where(f => !f.IsFolder && extensions.Any(ext => 
-                        f.FileName.EndsWith(ext, StringComparison.OrdinalIgnoreCase)));
-                }
-                
-                var results = query.Take(1000).ToList();
-                DisplaySearchResults(results);
-            }
-            catch (Exception ex)
-            {
-                localStatusLabel.Text = $"{LanguageManager.Get("MsgError")}: {ex.Message}";
-                MessageBox.Show($"搜索出错: {ex.Message}", LanguageManager.Get("MsgError"), MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-            finally
-            {
-                this.Cursor = Cursors.Default;
-            }
-        }
-        
-        private void DisplaySearchResults(List<FileAndDirectoryEntry> results)
-        {
-            localResultsGrid.Rows.Clear();
-            foreach (var file in results)
-            {
-                string fileType = file.IsFolder ? "📁" : "📄";
-                localResultsGrid.Rows.Add(file.FileName, fileType, file.FullFileName);
-            }
-            
-            if (results.Count > 0)
-            {
-                localStatusLabel.Text = string.Format(LanguageManager.Get("MsgResultCount"), results.Count);
-            }
-            else
-            {
-                localStatusLabel.Text = LanguageManager.Get("MsgNoResults");
             }
         }
 
@@ -1453,7 +1110,7 @@ namespace MultiModelChat
             searchTextBox.Focus();
         }
 
-        private void ToggleExpand(int index)
+        private async void ToggleExpand(int index)
         {
             if (currentExpandedIndex == index)
             {
@@ -1462,6 +1119,12 @@ namespace MultiModelChat
             else
             {
                 currentExpandedIndex = index;
+                // 确保切换到的WebView已初始化
+                var selectedSites = config.Sites.FindAll(s => s.IsSelected);
+                if (index >= 0 && index < selectedSites.Count)
+                {
+                    await InitializeWebViewIfNeeded(index, selectedSites[index]);
+                }
             }
 
             UpdateWebViewLayout();
@@ -1477,7 +1140,7 @@ namespace MultiModelChat
                 
                 string clickScript = @"
                     (function() {
-                        var inputElements = document.querySelectorAll('textarea[placeholder*=""提问""], textarea[aria-label*=""输入""], textarea, div[contenteditable=""true""]');
+                        var inputElements = document.querySelectorAll('textarea[placeholder*=""输入""], textarea[aria-label*=""输入""], textarea, div[contenteditable=""true""]');
                         for (var i = 0; i < inputElements.length; i++) {
                             var element = inputElements[i];
                             if (element.offsetHeight > 0 && element.offsetWidth > 0) {
@@ -1519,32 +1182,8 @@ namespace MultiModelChat
             }
         }
         
-        private void RestartAsAdmin()
-        {
-            try
-            {
-                var startInfo = new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = Application.ExecutablePath,
-                    UseShellExecute = true,
-                    Verb = "runas"
-                };
-                
-                System.Diagnostics.Process.Start(startInfo);
-                Application.Exit();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(
-                    $"无法以管理员身份启动程序: {ex.Message}",
-                    LanguageManager.Get("MsgError"),
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error);
-            }
-        }
-        
         /// <summary>
-        /// 创建圆角区域
+        /// 创建圆形区域
         /// </summary>
         private System.Drawing.Region CreateRoundedRegion(int width, int height, int radius)
         {
