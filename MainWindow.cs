@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Drawing;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.WinForms;
@@ -64,7 +64,7 @@ namespace MultiModelChat
         
         // 侧边栏 - 网络查询区域
         private Panel networkSectionPanel;
-        private Button networkSectionHeader;
+        private Label networkSectionHeader;
         private Panel networkSectionContent;
         private ToolStrip networkToolStrip;
         private TextBox searchTextBox;
@@ -81,6 +81,14 @@ namespace MultiModelChat
         // 状态变量
         private bool isNetworkSectionExpanded = true;
         
+        // 图标动画相关
+        private System.Windows.Forms.Timer? animationTimer;
+        private int animationFrame = 0;
+        private bool isAnimating = false;
+        private Random random = new Random();
+        private int nextAnimationTime = 0;
+        private int animationCounter = 0;
+        
         // 拖拽相关变量
         private bool isDraggingBtn = false;
         private bool isDraggingPanel = false;
@@ -94,11 +102,11 @@ namespace MultiModelChat
         // 配置信息
         private WebViewConfig config = new WebViewConfig();
         private string configFilePath = Path.Combine(Application.StartupPath, "webview_config.json");
-        private string historyFilePath = Path.Combine(Application.StartupPath, "history.txt");
+        private string historyDirPath = Path.Combine(Application.StartupPath, "history");
         
-        // 常量
-        private const int SIDEBAR_WIDTH = 320;
-        private const int SIDEBAR_HEIGHT = 400;
+        // 常量 - 默认长方形对话框尺寸
+        private const int SIDEBAR_WIDTH = 480;
+        private const int SIDEBAR_HEIGHT = 320;
 
         public MainWindow()
         {
@@ -241,35 +249,43 @@ namespace MultiModelChat
             path.AddEllipse(0, 0, 48, 48);
             toggleSidebarBtn.Region = new Region(path);
 
-            // 自定义绘制浮动图标
+            // 自定义绘制浮动图标 - 智慧老人头像
             toggleSidebarBtn.Paint += (s, e) =>
             {
                 var g = e.Graphics;
                 g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
+                g.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighQuality;
+                g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
                 
-                // 绘制渐变背景
+                // 计算动画偏移量（跳动效果）
+                int offsetY = 0;
+                if (isAnimating && animationFrame > 0)
+                {
+                    // 使用正弦波模拟跳动：向上弹起然后落下
+                    double phase = animationFrame / 10.0; // 一帧10个时间单位
+                    offsetY = (int)(-3 * Math.Sin(phase * Math.PI)); // 最大向上偏移3像素
+                }
+                
+                // 绘制柔和的渐变背景 - 暖色调智慧感
                 using (var brush = new System.Drawing.Drawing2D.LinearGradientBrush(
                     toggleSidebarBtn.ClientRectangle,
-                    Color.FromArgb(24, 144, 255),
-                    Color.FromArgb(0, 100, 200),
-                    45f))
+                    Color.FromArgb(255, 200, 120),
+                    Color.FromArgb(230, 150, 80),
+                    135f))
                 {
-                    g.FillEllipse(brush, 0, 0, 47, 47);
+                    g.FillEllipse(brush, 1, 1 + offsetY, 46, 46);
                 }
                 
-                // 绘制图标 (三条横线，类似汉堡菜单)
-                using (var pen = new Pen(Color.White, 3))
+                // 绘制金色光环效果
+                using (var pen = new Pen(Color.FromArgb(255, 220, 150), 2))
                 {
-                    pen.StartCap = System.Drawing.Drawing2D.LineCap.Round;
-                    pen.EndCap = System.Drawing.Drawing2D.LineCap.Round;
-                    
-                    int centerX = toggleSidebarBtn.Width / 2;
-                    int centerY = toggleSidebarBtn.Height / 2;
-                    
-                    g.DrawLine(pen, centerX - 10, centerY - 6, centerX + 10, centerY - 6);
-                    g.DrawLine(pen, centerX - 10, centerY, centerX + 10, centerY);
-                    g.DrawLine(pen, centerX - 10, centerY + 6, centerX + 10, centerY + 6);
+                    g.DrawEllipse(pen, 2, 2 + offsetY, 44, 44);
                 }
+                
+                // 绘制智慧老人头像（带动画偏移）
+                var avatarRect = toggleSidebarBtn.ClientRectangle;
+                avatarRect.Offset(0, offsetY);
+                DrawWiseOldManAvatar(g, avatarRect, offsetY);
             };
             
             // 按钮拖拽事件
@@ -339,58 +355,171 @@ namespace MultiModelChat
             
             // 初始化WebViews（延迟加载优化）
             UpdateWebViews();
+            
+            // 初始化图标动画Timer
+            InitializeAnimationTimer();
+        }
+        
+        /// <summary>
+        /// 初始化图标动画定时器
+        /// </summary>
+        private void InitializeAnimationTimer()
+        {
+            // 设置下一次动画的随机时间（3-8秒之间）
+            nextAnimationTime = random.Next(300, 800);
+            
+            animationTimer = new System.Windows.Forms.Timer();
+            animationTimer.Interval = 50; // 50ms刷新一次
+            animationTimer.Tick += (s, e) =>
+            {
+                animationCounter++;
+                
+                // 检查是否需要开始新的动画
+                if (!isAnimating && animationCounter >= nextAnimationTime)
+                {
+                    isAnimating = true;
+                    animationFrame = 0;
+                }
+                
+                // 执行动画
+                if (isAnimating)
+                {
+                    animationFrame++;
+                    toggleSidebarBtn?.Invalidate(); // 重绘按钮
+                    
+                    // 动画结束（10帧完成一次跳动）
+                    if (animationFrame >= 10)
+                    {
+                        isAnimating = false;
+                        animationFrame = 0;
+                        animationCounter = 0;
+                        // 设置下一次动画的随机时间
+                        nextAnimationTime = random.Next(300, 800); // 15-40秒（300*50ms 到 800*50ms）
+                    }
+                }
+            };
+            animationTimer.Start();
         }
 
         private void CreateFloatingSidebar()
         {
-            // 使用双缓冲面板减少闪烁
+            // 使用双缓冲面板减少闪烁 - 现代问答对话框样式
             floatingSidebarPanel = new DoubleBufferedPanel();
             floatingSidebarPanel.Size = new Size(SIDEBAR_WIDTH, SIDEBAR_HEIGHT);
             floatingSidebarPanel.Location = new Point(60, 40);
-            floatingSidebarPanel.BackColor = Color.FromArgb(250, 251, 253);
+            floatingSidebarPanel.BackColor = Color.White;
             floatingSidebarPanel.BorderStyle = BorderStyle.None;
             floatingSidebarPanel.Visible = false;
             floatingSidebarPanel.Padding = new Padding(0);
             
-            // 添加圆角的边框效果
+            // 创建圆角区域
+            var roundPath = new System.Drawing.Drawing2D.GraphicsPath();
+            int radius = 16;
+            roundPath.AddArc(0, 0, radius * 2, radius * 2, 180, 90);
+            roundPath.AddArc(floatingSidebarPanel.Width - radius * 2, 0, radius * 2, radius * 2, 270, 90);
+            roundPath.AddArc(floatingSidebarPanel.Width - radius * 2, floatingSidebarPanel.Height - radius * 2, radius * 2, radius * 2, 0, 90);
+            roundPath.AddArc(0, floatingSidebarPanel.Height - radius * 2, radius * 2, radius * 2, 90, 90);
+            roundPath.CloseFigure();
+            floatingSidebarPanel.Region = new Region(roundPath);
+            
+            // 现代化圆角对话框样式绘制
             floatingSidebarPanel.Paint += (s, e) =>
             {
                 var rect = floatingSidebarPanel.ClientRectangle;
                 var g = e.Graphics;
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
+                g.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighQuality;
                 
-                // 绘制简单阴影效果
-                using (var shadowPen = new Pen(Color.FromArgb(30, 0, 0, 0), 4))
+                // 绘制多层阴影效果 - 外发光
+                for (int i = 8; i > 0; i--)
                 {
-                    g.DrawRectangle(shadowPen, new Rectangle(2, 2, rect.Width - 4, rect.Height - 4));
+                    using (var shadowPen = new Pen(Color.FromArgb(8 - i, 100, 100, 120), i))
+                    {
+                        var shadowRect = new Rectangle(i, i, rect.Width - i * 2, rect.Height - i * 2);
+                        using (var shadowPath = new System.Drawing.Drawing2D.GraphicsPath())
+                        {
+                            shadowPath.AddArc(shadowRect.X, shadowRect.Y, radius, radius, 180, 90);
+                            shadowPath.AddArc(shadowRect.Right - radius, shadowRect.Y, radius, radius, 270, 90);
+                            shadowPath.AddArc(shadowRect.Right - radius, shadowRect.Bottom - radius, radius, radius, 0, 90);
+                            shadowPath.AddArc(shadowRect.X, shadowRect.Bottom - radius, radius, radius, 90, 90);
+                            shadowPath.CloseFigure();
+                            g.DrawPath(shadowPen, shadowPath);
+                        }
+                    }
                 }
                 
-                // 绘制边框
-                using (var borderPen = new Pen(Color.FromArgb(24, 144, 255), 2))
+                // 绘制边框 - 柔和的蓝色渐变边框
+                using (var borderBrush = new System.Drawing.Drawing2D.LinearGradientBrush(
+                    rect, Color.FromArgb(100, 180, 255), Color.FromArgb(80, 160, 240), 45f))
+                using (var borderPen = new Pen(borderBrush, 1.5f))
                 {
-                    g.DrawRectangle(borderPen, new Rectangle(0, 0, rect.Width - 1, rect.Height - 1));
+                    using (var borderPath = new System.Drawing.Drawing2D.GraphicsPath())
+                    {
+                        borderPath.AddArc(0, 0, radius, radius, 180, 90);
+                        borderPath.AddArc(rect.Width - radius, 0, radius, radius, 270, 90);
+                        borderPath.AddArc(rect.Width - radius, rect.Height - radius, radius, radius, 0, 90);
+                        borderPath.AddArc(0, rect.Height - radius, radius, radius, 90, 90);
+                        borderPath.CloseFigure();
+                        g.DrawPath(borderPen, borderPath);
+                    }
                 }
             };
             
-            // 添加标题栏（用于拖拽）- 使用双缓冲面板
+            // 更新圆角区域当大小改变时
+            floatingSidebarPanel.Resize += (s, e) =>
+            {
+                var newPath = new System.Drawing.Drawing2D.GraphicsPath();
+                newPath.AddArc(0, 0, radius * 2, radius * 2, 180, 90);
+                newPath.AddArc(floatingSidebarPanel.Width - radius * 2, 0, radius * 2, radius * 2, 270, 90);
+                newPath.AddArc(floatingSidebarPanel.Width - radius * 2, floatingSidebarPanel.Height - radius * 2, radius * 2, radius * 2, 0, 90);
+                newPath.AddArc(0, floatingSidebarPanel.Height - radius * 2, radius * 2, radius * 2, 90, 90);
+                newPath.CloseFigure();
+                floatingSidebarPanel.Region = new Region(newPath);
+            };
+            
+            // 添加标题栏（用于拖拽）- 现代化渐变样式
             sidebarTitleBar = new DoubleBufferedPanel();
             sidebarTitleBar.Dock = DockStyle.Top;
-            sidebarTitleBar.Height = 32;
-            sidebarTitleBar.BackColor = Color.FromArgb(24, 144, 255);
+            sidebarTitleBar.Height = 42;
             sidebarTitleBar.Cursor = Cursors.SizeAll;
             
-            // 标题文字
+            // 自定义绘制渐变标题栏
+            sidebarTitleBar.Paint += (s, e) =>
+            {
+                var g = e.Graphics;
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
+                
+                // 渐变背景 - 现代蓝紫渐变
+                using (var gradientBrush = new System.Drawing.Drawing2D.LinearGradientBrush(
+                    sidebarTitleBar.ClientRectangle,
+                    Color.FromArgb(86, 119, 252),
+                    Color.FromArgb(95, 85, 215),
+                    135f))
+                {
+                    g.FillRectangle(gradientBrush, sidebarTitleBar.ClientRectangle);
+                }
+                
+                // 顶部高光
+                using (var highlightPen = new Pen(Color.FromArgb(120, 160, 255), 1))
+                {
+                    g.DrawLine(highlightPen, 0, 0, sidebarTitleBar.Width, 0);
+                }
+            };
+            
+            // 标题文字 - 更现代的风格
             var titleLabel = new Label();
-            titleLabel.Text = LanguageManager.Get("ToggleSidebar");
+            titleLabel.Text = "✨ " + LanguageManager.Get("ToggleSidebar");
             titleLabel.ForeColor = Color.White;
-            titleLabel.Font = new Font("微软雅黑", 10, FontStyle.Bold);
+            titleLabel.Font = new Font("微软雅黑", 11, FontStyle.Bold);
             titleLabel.AutoSize = false;
-            titleLabel.Size = new Size(200, 32);
-            titleLabel.Location = new Point(10, 0);
+            titleLabel.Size = new Size(200, 42);
+            titleLabel.Location = new Point(12, 0);
             titleLabel.TextAlign = ContentAlignment.MiddleLeft;
             titleLabel.Cursor = Cursors.SizeAll;
+            titleLabel.BackColor = Color.Transparent;
             
             // 添加标题栏拖拽事件
-            Point btnOffset = new Point(0, 0);  // 图标相对面板的偏移
+            Point btnOffset = new Point(0, 0);
             EventHandler<MouseEventArgs> titleMouseDown = (s, e) =>
             {
                 if (e.Button == MouseButtons.Left)
@@ -402,7 +531,6 @@ namespace MultiModelChat
                         dragOffset.X += titleLabel.Location.X;
                         dragOffset.Y += titleLabel.Location.Y;
                     }
-                    // 记录图标相对面板的位置
                     btnOffset = new Point(
                         toggleSidebarBtn.Location.X - floatingSidebarPanel.Location.X,
                         toggleSidebarBtn.Location.Y - floatingSidebarPanel.Location.Y
@@ -422,13 +550,11 @@ namespace MultiModelChat
                     var newLocation = floatingSidebarPanel.Location;
                     newLocation.X += mousePos.X - dragOffset.X;
                     newLocation.Y += mousePos.Y - dragOffset.Y;
-                    // 限制在窗口范围内
                     newLocation.X = Math.Max(0, Math.Min(this.ClientSize.Width - 100, newLocation.X));
                     newLocation.Y = Math.Max(25, Math.Min(this.ClientSize.Height - 100, newLocation.Y));
                     
                     floatingSidebarPanel.Location = newLocation;
                     
-                    // 同时移动图标
                     var btnLocation = new Point(
                         newLocation.X + btnOffset.X,
                         newLocation.Y + btnOffset.Y
@@ -451,44 +577,53 @@ namespace MultiModelChat
             titleLabel.MouseMove += (s, e) => titleMouseMove(s, e);
             titleLabel.MouseUp += (s, e) => titleMouseUp(s, e);
             
-            // 关闭按钮（放在最右边）
+            // 关闭按钮 - 现代化圆形按钮
             var closeBtn = new Button();
             closeBtn.Size = new Size(28, 28);
-            closeBtn.Location = new Point(SIDEBAR_WIDTH - 32, 2);
-            closeBtn.Text = "×";
+            closeBtn.Location = new Point(SIDEBAR_WIDTH - 36, 7);
+            closeBtn.Text = "✕";
             closeBtn.TextAlign = ContentAlignment.MiddleCenter;
             closeBtn.FlatStyle = FlatStyle.Flat;
             closeBtn.FlatAppearance.BorderSize = 0;
-            closeBtn.FlatAppearance.MouseOverBackColor = Color.FromArgb(255, 77, 79);
-            closeBtn.BackColor = Color.Transparent;
+            closeBtn.BackColor = Color.FromArgb(60, 255, 255, 255);
             closeBtn.ForeColor = Color.White;
-            closeBtn.Font = new Font("Segoe UI Symbol", 10);
+            closeBtn.Font = new Font("Segoe UI", 10, FontStyle.Bold);
             closeBtn.Cursor = Cursors.Hand;
+            // 创建圆形区域
+            var closePath = new System.Drawing.Drawing2D.GraphicsPath();
+            closePath.AddEllipse(0, 0, 28, 28);
+            closeBtn.Region = new System.Drawing.Region(closePath);
+            
+            closeBtn.MouseEnter += (s, e) => closeBtn.BackColor = Color.FromArgb(255, 100, 100);
+            closeBtn.MouseLeave += (s, e) => closeBtn.BackColor = Color.FromArgb(60, 255, 255, 255);
             closeBtn.Click += (s, e) => { floatingSidebarPanel.Visible = false; };
             
             sidebarTitleBar.Controls.Add(titleLabel);
             sidebarTitleBar.Controls.Add(closeBtn);
             closeBtn.BringToFront();
             
-            // 添加调整大小手柄（右下角）
+            // 添加调整大小手柄（右下角）- 现代化样式
             resizeGrip = new Panel();
-            resizeGrip.Size = new Size(16, 16);
+            resizeGrip.Size = new Size(20, 20);
             resizeGrip.BackColor = Color.Transparent;
             resizeGrip.Cursor = Cursors.SizeNWSE;
             resizeGrip.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
             
-            // 绘制调整大小图标
+            // 绘制现代化的调整大小图标
             resizeGrip.Paint += (s, e) =>
             {
                 var g = e.Graphics;
-                using (var brush = new SolidBrush(Color.FromArgb(150, 120, 120, 120)))
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
+                
+                using (var brush = new SolidBrush(Color.FromArgb(120, 140, 180)))
                 {
-                    // 绘制斜线图标
-                    g.FillPolygon(brush, new Point[] {
-                        new Point(16, 4),
-                        new Point(16, 16),
-                        new Point(4, 16)
-                    });
+                    // 绘制三个小圆点组成调整手柄
+                    g.FillEllipse(brush, 12, 4, 4, 4);
+                    g.FillEllipse(brush, 8, 8, 4, 4);
+                    g.FillEllipse(brush, 12, 8, 4, 4);
+                    g.FillEllipse(brush, 4, 12, 4, 4);
+                    g.FillEllipse(brush, 8, 12, 4, 4);
+                    g.FillEllipse(brush, 12, 12, 4, 4);
                 }
             };
             
@@ -515,14 +650,11 @@ namespace MultiModelChat
                     int newWidth = resizeStartSize.Width + (currentPos.X - resizeStartPos.X);
                     int newHeight = resizeStartSize.Height + (currentPos.Y - resizeStartPos.Y);
                     
-                    // 设置最小和最大尺寸
-                    newWidth = Math.Max(280, Math.Min(600, newWidth));
-                    newHeight = Math.Max(300, Math.Min(800, newHeight));
+                    newWidth = Math.Max(320, Math.Min(650, newWidth));
+                    newHeight = Math.Max(380, Math.Min(850, newHeight));
                     
                     floatingSidebarPanel.Size = new Size(newWidth, newHeight);
-                    
-                    // 更新关闭按钮位置
-                    closeBtn.Location = new Point(floatingSidebarPanel.Width - 32, 2);
+                    closeBtn.Location = new Point(floatingSidebarPanel.Width - 36, 7);
                 }
             };
             resizeGrip.MouseUp += (s, e) =>
@@ -530,12 +662,12 @@ namespace MultiModelChat
                 isResizingPanel = false;
             };
             
-            // 内容面板（包含工具栏和搜索框） 使用双缓冲面板
+            // 内容面板 - 现代化白色卡片样式
             var contentPanel = new DoubleBufferedPanel();
             contentPanel.Dock = DockStyle.Fill;
-            contentPanel.BackColor = Color.FromArgb(250, 251, 253);
+            contentPanel.BackColor = Color.White;
             contentPanel.AutoScroll = true;
-            contentPanel.Padding = new Padding(5);
+            contentPanel.Padding = new Padding(12);
             
             // 网络查询区域
             CreateNetworkSection();
@@ -551,52 +683,55 @@ namespace MultiModelChat
             // 更新调整手柄位置
             floatingSidebarPanel.Resize += (s, e) =>
             {
-                resizeGrip.Location = new Point(floatingSidebarPanel.Width - 16, floatingSidebarPanel.Height - 16);
+                resizeGrip.Location = new Point(floatingSidebarPanel.Width - 20, floatingSidebarPanel.Height - 20);
             };
-            resizeGrip.Location = new Point(floatingSidebarPanel.Width - 16, floatingSidebarPanel.Height - 16);
+            resizeGrip.Location = new Point(floatingSidebarPanel.Width - 20, floatingSidebarPanel.Height - 20);
             resizeGrip.BringToFront();
         }
 
         private void CreateNetworkSection()
         {
             networkSectionPanel = new Panel();
-            networkSectionPanel.Dock = DockStyle.Top;
-            networkSectionPanel.Height = 260;
-            networkSectionPanel.BackColor = Color.FromArgb(250, 251, 252);
+            networkSectionPanel.Dock = DockStyle.Fill;
+            networkSectionPanel.BackColor = Color.White;
+            networkSectionPanel.Padding = new Padding(0);
             
-            // 区块标题
-            networkSectionHeader = new Button();
+            // 现代化简洁标题栏 - 移除折叠功能，保持简洁
+            networkSectionHeader = new Label();
             networkSectionHeader.Dock = DockStyle.Top;
-            networkSectionHeader.Height = 36;
-            networkSectionHeader.Text = "▼ " + LanguageManager.Get("SectionNetwork");
+            networkSectionHeader.Height = 32;
+            networkSectionHeader.Text = LanguageManager.Get("SectionNetwork");
             networkSectionHeader.TextAlign = ContentAlignment.MiddleLeft;
-            networkSectionHeader.Padding = new Padding(8, 0, 0, 0);
-            networkSectionHeader.FlatStyle = FlatStyle.Flat;
-            networkSectionHeader.FlatAppearance.BorderSize = 0;
-            networkSectionHeader.BackColor = Color.FromArgb(24, 144, 255);
-            networkSectionHeader.ForeColor = Color.White;
-            networkSectionHeader.Font = new Font("微软雅黑", 10, FontStyle.Bold);
-            networkSectionHeader.Cursor = Cursors.Hand;
-            networkSectionHeader.Click += (s, e) => ToggleNetworkSection();
+            networkSectionHeader.Padding = new Padding(4, 0, 0, 4);
+            networkSectionHeader.BackColor = Color.White;
+            networkSectionHeader.ForeColor = Color.FromArgb(86, 119, 252);
+            networkSectionHeader.Font = new Font("微软雅黑", 11, FontStyle.Bold);
             
-            // 区块内容
+            // 区块内容 - 现代化卡片样式
             networkSectionContent = new Panel();
             networkSectionContent.Dock = DockStyle.Fill;
-            networkSectionContent.Padding = new Padding(8);
-            networkSectionContent.BackColor = Color.FromArgb(250, 251, 252);
+            networkSectionContent.Padding = new Padding(0);
+            networkSectionContent.BackColor = Color.White;
             
             // 工具栏
             CreateNetworkToolStrip();
             
-            // 搜索输入框
+            // 搜索输入框 - 现代化圆角输入框
+            var inputContainer = new Panel();
+            inputContainer.Dock = DockStyle.Fill;
+            inputContainer.BackColor = Color.FromArgb(248, 249, 252);
+            inputContainer.Padding = new Padding(12);
+            
             searchTextBox = new TextBox();
             searchTextBox.Dock = DockStyle.Fill;
-            searchTextBox.Font = new Font("微软雅黑", 11);
+            searchTextBox.Font = new Font("微软雅黑", 12);
             searchTextBox.PlaceholderText = LanguageManager.Get("InputPlaceholder");
             searchTextBox.Multiline = true;
             searchTextBox.ScrollBars = ScrollBars.Vertical;
             searchTextBox.AcceptsReturn = false;
-            searchTextBox.BorderStyle = BorderStyle.FixedSingle;
+            searchTextBox.BorderStyle = BorderStyle.None;
+            searchTextBox.BackColor = Color.FromArgb(248, 249, 252);
+            searchTextBox.ForeColor = Color.FromArgb(60, 60, 70);
             searchTextBox.KeyDown += (sender, e) => {
                 if ((e.Control && e.KeyCode == Keys.Enter) || (e.KeyCode == Keys.Enter && !e.Shift))
                 {
@@ -606,7 +741,8 @@ namespace MultiModelChat
                 }
             };
             
-            networkSectionContent.Controls.Add(searchTextBox);
+            inputContainer.Controls.Add(searchTextBox);
+            networkSectionContent.Controls.Add(inputContainer);
             networkSectionContent.Controls.Add(networkToolStrip);
             
             networkSectionPanel.Controls.Add(networkSectionContent);
@@ -617,13 +753,14 @@ namespace MultiModelChat
         {
             networkToolStrip = new ToolStrip();
             networkToolStrip.Dock = DockStyle.Top;
-            networkToolStrip.ImageScalingSize = new Size(16, 16);
+            networkToolStrip.ImageScalingSize = new Size(18, 18);
             networkToolStrip.Font = new Font("微软雅黑", 9);
-            networkToolStrip.BackColor = Color.FromArgb(250, 251, 252);
+            networkToolStrip.BackColor = Color.White;
             networkToolStrip.GripStyle = ToolStripGripStyle.Hidden;
-            networkToolStrip.Padding = new Padding(0, 2, 0, 2);
+            networkToolStrip.Padding = new Padding(8, 6, 8, 6);
             networkToolStrip.RenderMode = ToolStripRenderMode.System;
             networkToolStrip.LayoutStyle = ToolStripLayoutStyle.Flow;
+            networkToolStrip.Height = 42;
             
             UpdateNetworkToolStrip();
         }
@@ -679,23 +816,144 @@ namespace MultiModelChat
             btn.Text = text;
             btn.DisplayStyle = ToolStripItemDisplayStyle.ImageAndText;
             btn.ToolTipText = text;
-            btn.Margin = new Padding(1, 0, 1, 0);
-            btn.Padding = new Padding(2, 1, 2, 1);
+            btn.Margin = new Padding(2, 2, 2, 2);
+            btn.Padding = new Padding(6, 4, 6, 4);
             btn.AutoSize = true;
+            btn.BackColor = Color.FromArgb(248, 249, 252);
+            btn.ForeColor = Color.FromArgb(80, 80, 90);
+            btn.Font = new Font("微软雅黑", 9);
             
-            using (var bmp = new Bitmap(16, 16))
+            using (var bmp = new Bitmap(18, 18))
             using (var g = Graphics.FromImage(bmp))
             {
                 g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
                 g.Clear(Color.Transparent);
                 using (var brush = new SolidBrush(iconColor))
                 {
-                    g.DrawString(icon, new Font("Segoe UI Symbol", 9, FontStyle.Bold), brush, 0, 0);
+                    g.DrawString(icon, new Font("Segoe UI Symbol", 10, FontStyle.Bold), brush, 0, 0);
                 }
                 btn.Image = (Image)bmp.Clone();
             }
             
             return btn;
+        }
+
+        /// <summary>
+        /// 绘制智慧老人头像
+        /// </summary>
+        /// <param name="offsetY">垂直偏移量，用于动画效果</param>
+        private void DrawWiseOldManAvatar(Graphics g, Rectangle rect, int offsetY = 0)
+        {
+            int centerX = rect.Width / 2;
+            int centerY = rect.Height / 2 + offsetY;
+            
+            // 脸部 - 暖肤色
+            using (var faceBrush = new SolidBrush(Color.FromArgb(255, 220, 177)))
+            {
+                g.FillEllipse(faceBrush, centerX - 14, centerY - 10, 28, 26);
+            }
+            
+            // 白发/胡须 - 银白色
+            using (var hairBrush = new SolidBrush(Color.FromArgb(240, 240, 245)))
+            {
+                // 头顶白发
+                g.FillEllipse(hairBrush, centerX - 16, centerY - 16, 32, 16);
+                // 两侧白发
+                g.FillEllipse(hairBrush, centerX - 18, centerY - 8, 10, 18);
+                g.FillEllipse(hairBrush, centerX + 8, centerY - 8, 10, 18);
+            }
+            
+            // 眉毛 - 白色长眉
+            using (var browPen = new Pen(Color.FromArgb(220, 220, 230), 2))
+            {
+                browPen.StartCap = System.Drawing.Drawing2D.LineCap.Round;
+                browPen.EndCap = System.Drawing.Drawing2D.LineCap.Round;
+                // 左眉
+                g.DrawCurve(browPen, new Point[] {
+                    new Point(centerX - 10, centerY - 4),
+                    new Point(centerX - 6, centerY - 6),
+                    new Point(centerX - 2, centerY - 4)
+                });
+                // 右眉
+                g.DrawCurve(browPen, new Point[] {
+                    new Point(centerX + 2, centerY - 4),
+                    new Point(centerX + 6, centerY - 6),
+                    new Point(centerX + 10, centerY - 4)
+                });
+            }
+            
+            // 眼睛 - 智慧的黑色眼睛，带高光
+            using (var eyeBrush = new SolidBrush(Color.FromArgb(50, 40, 35)))
+            {
+                g.FillEllipse(eyeBrush, centerX - 8, centerY - 2, 5, 5);
+                g.FillEllipse(eyeBrush, centerX + 3, centerY - 2, 5, 5);
+            }
+            // 眼睛高光
+            using (var highlightBrush = new SolidBrush(Color.White))
+            {
+                g.FillEllipse(highlightBrush, centerX - 7, centerY - 1, 2, 2);
+                g.FillEllipse(highlightBrush, centerX + 4, centerY - 1, 2, 2);
+            }
+            
+            // 鼻子
+            using (var nosePen = new Pen(Color.FromArgb(200, 160, 130), 1))
+            {
+                g.DrawCurve(nosePen, new Point[] {
+                    new Point(centerX, centerY + 1),
+                    new Point(centerX - 1, centerY + 5),
+                    new Point(centerX + 2, centerY + 5)
+                });
+            }
+            
+            // 嘴巴 - 慈祥的微笑
+            using (var mouthPen = new Pen(Color.FromArgb(180, 100, 90), 1.5f))
+            {
+                mouthPen.StartCap = System.Drawing.Drawing2D.LineCap.Round;
+                mouthPen.EndCap = System.Drawing.Drawing2D.LineCap.Round;
+                g.DrawArc(mouthPen, centerX - 6, centerY + 4, 12, 8, 20, 140);
+            }
+            
+            // 长胡须 - 飘逸的白胡须
+            using (var beardBrush = new SolidBrush(Color.FromArgb(235, 235, 240)))
+            {
+                // 主胡须
+                g.FillEllipse(beardBrush, centerX - 10, centerY + 8, 20, 14);
+                // 胡须细节
+                using (var beardPen = new Pen(Color.FromArgb(220, 220, 225), 1))
+                {
+                    g.DrawCurve(beardPen, new Point[] {
+                        new Point(centerX - 6, centerY + 12),
+                        new Point(centerX - 8, centerY + 16),
+                        new Point(centerX - 5, centerY + 18)
+                    });
+                    g.DrawCurve(beardPen, new Point[] {
+                        new Point(centerX + 2, centerY + 14),
+                        new Point(centerX + 3, centerY + 18),
+                        new Point(centerX + 6, centerY + 17)
+                    });
+                }
+            }
+            
+            // 眼镜 - 智慧的金边眼镜
+            using (var glassesPen = new Pen(Color.FromArgb(180, 160, 100), 1.5f))
+            {
+                // 左镜片框
+                g.DrawEllipse(glassesPen, centerX - 10, centerY - 4, 8, 7);
+                // 右镜片框
+                g.DrawEllipse(glassesPen, centerX + 2, centerY - 4, 8, 7);
+                // 鼻梁架
+                g.DrawLine(glassesPen, centerX - 2, centerY - 1, centerX + 2, centerY - 1);
+                // 镜腿
+                g.DrawLine(glassesPen, centerX - 10, centerY - 1, centerX - 14, centerY - 3);
+                g.DrawLine(glassesPen, centerX + 10, centerY - 1, centerX + 14, centerY - 3);
+            }
+            
+            // 腮红 - 健康的红晕
+            using (var cheekBrush = new SolidBrush(Color.FromArgb(40, 255, 180, 160)))
+            {
+                g.FillEllipse(cheekBrush, centerX - 11, centerY + 2, 5, 4);
+                g.FillEllipse(cheekBrush, centerX + 6, centerY + 2, 5, 4);
+            }
         }
 
         private void ToggleNetworkSection()
@@ -1047,6 +1305,16 @@ namespace MultiModelChat
         {
             try
             {
+                // 确保历史目录存在
+                if (!Directory.Exists(historyDirPath))
+                {
+                    Directory.CreateDirectory(historyDirPath);
+                }
+                
+                // 按日期生成文件名
+                string dateStr = DateTime.Now.ToString("yyyy-MM-dd");
+                string historyFilePath = Path.Combine(historyDirPath, $"history_{dateStr}.txt");
+                
                 string timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
                 string record = $"[{timestamp}] {question}";
                 File.AppendAllText(historyFilePath, record + Environment.NewLine);
@@ -1059,7 +1327,13 @@ namespace MultiModelChat
 
         private void HistoryButton_Click(object sender, EventArgs e)
         {
-            var historyForm = new HistoryForm(historyFilePath);
+            // 确保历史目录存在
+            if (!Directory.Exists(historyDirPath))
+            {
+                Directory.CreateDirectory(historyDirPath);
+            }
+            
+            var historyForm = new HistoryForm(historyDirPath);
             historyForm.ShowDialog(this);
         }
 
