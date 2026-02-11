@@ -9,17 +9,20 @@ namespace MultiModelChat
 {
     public class HistoryForm : Form
     {
-        private string historyFilePath;
+        private string historyDirPath;
+        private string currentHistoryFilePath = "";
         private Panel historyListPanel;
         private Button clearAllButton;
         private Button closeButton;
+        private ComboBox dateSelector;
+        private Label dateLabel;
         private List<TextBox> historyTextBoxes = new List<TextBox>();
 
-        public HistoryForm(string filePath)
+        public HistoryForm(string dirPath)
         {
-            historyFilePath = filePath;
+            historyDirPath = dirPath;
             InitializeComponent();
-            LoadHistory();
+            LoadAvailableDates();
         }
 
         private void InitializeComponent()
@@ -31,11 +34,37 @@ namespace MultiModelChat
             this.MinimumSize = new Size(600, 400);
             this.BackColor = Color.FromArgb(245, 247, 250);
 
-            // 顶部说明
+            // 顶部面板 - 包含日期选择
+            Panel topPanel = new Panel();
+            topPanel.Dock = DockStyle.Top;
+            topPanel.Height = 50;
+            topPanel.BackColor = Color.FromArgb(240, 242, 245);
+            topPanel.Padding = new Padding(10, 8, 10, 8);
+
+            // 日期选择标签
+            dateLabel = new Label();
+            dateLabel.Text = LanguageManager.CurrentLanguage == Language.Chinese ? "选择日期:" : "Select Date:";
+            dateLabel.AutoSize = true;
+            dateLabel.Location = new Point(10, 15);
+            dateLabel.Font = new Font("微软雅黑", 10);
+            dateLabel.ForeColor = Color.FromArgb(60, 60, 60);
+
+            // 日期选择下拉框
+            dateSelector = new ComboBox();
+            dateSelector.Location = new Point(100, 12);
+            dateSelector.Size = new Size(200, 28);
+            dateSelector.Font = new Font("微软雅黑", 10);
+            dateSelector.DropDownStyle = ComboBoxStyle.DropDownList;
+            dateSelector.SelectedIndexChanged += DateSelector_SelectedIndexChanged;
+
+            topPanel.Controls.Add(dateLabel);
+            topPanel.Controls.Add(dateSelector);
+
+            // 提示标签
             Label tipLabel = new Label();
             tipLabel.Text = LanguageManager.CurrentLanguage == Language.Chinese ? "历史记录 (您可以直接在框内编辑并复制文字):" : "History (You can edit and copy text directly):";
             tipLabel.Dock = DockStyle.Top;
-            tipLabel.Height = 35;
+            tipLabel.Height = 30;
             tipLabel.TextAlign = ContentAlignment.MiddleLeft;
             tipLabel.Padding = new Padding(10, 0, 0, 0);
             tipLabel.Font = new Font("微软雅黑", 9, FontStyle.Italic);
@@ -57,7 +86,7 @@ namespace MultiModelChat
 
             // 创建清空全部按钮
             clearAllButton = new Button();
-            clearAllButton.Text = LanguageManager.CurrentLanguage == Language.Chinese ? "清空全部" : "Clear All";
+            clearAllButton.Text = LanguageManager.CurrentLanguage == Language.Chinese ? "清空当日" : "Clear Day";
             clearAllButton.Size = new Size(120, 35);
             clearAllButton.Location = new Point(10, 12);
             clearAllButton.FlatStyle = FlatStyle.Flat;
@@ -88,20 +117,76 @@ namespace MultiModelChat
             // 添加控件到窗体
             this.Controls.Add(historyListPanel);
             this.Controls.Add(tipLabel);
+            this.Controls.Add(topPanel);
             this.Controls.Add(buttonPanel);
         }
 
-        private void LoadHistory()
+        private void LoadAvailableDates()
+        {
+            dateSelector.Items.Clear();
+            
+            try
+            {
+                if (!Directory.Exists(historyDirPath))
+                {
+                    Directory.CreateDirectory(historyDirPath);
+                }
+
+                // 获取所有历史文件
+                var files = Directory.GetFiles(historyDirPath, "history_*.txt")
+                    .Select(f => Path.GetFileNameWithoutExtension(f))
+                    .Select(f => f.Replace("history_", ""))
+                    .Where(f => !string.IsNullOrEmpty(f))
+                    .OrderByDescending(f => f)
+                    .ToList();
+
+                if (files.Count == 0)
+                {
+                    dateSelector.Items.Add(LanguageManager.CurrentLanguage == Language.Chinese ? "暂无历史记录" : "No history");
+                    dateSelector.Enabled = false;
+                    ShowEmptyMessage();
+                }
+                else
+                {
+                    foreach (var date in files)
+                    {
+                        dateSelector.Items.Add(date);
+                    }
+                    dateSelector.SelectedIndex = 0;
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"加载日期列表时出错: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void DateSelector_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (dateSelector.SelectedItem == null) return;
+            
+            string selectedDate = dateSelector.SelectedItem.ToString() ?? "";
+            if (string.IsNullOrEmpty(selectedDate) || selectedDate.Contains("暂无") || selectedDate.Contains("No"))
+            {
+                ShowEmptyMessage();
+                return;
+            }
+
+            currentHistoryFilePath = Path.Combine(historyDirPath, $"history_{selectedDate}.txt");
+            LoadHistoryForDate(currentHistoryFilePath);
+        }
+
+        private void LoadHistoryForDate(string filePath)
         {
             historyListPanel.Controls.Clear();
             historyTextBoxes.Clear();
 
             try
             {
-                if (File.Exists(historyFilePath))
+                if (File.Exists(filePath))
                 {
-                    var lines = File.ReadAllLines(historyFilePath).ToList();
-                    lines.Reverse(); // 最近的在最上面
+                    var lines = File.ReadAllLines(filePath).ToList();
+                    lines.Reverse();
                     
                     if (lines.Count == 0 || (lines.Count == 1 && string.IsNullOrWhiteSpace(lines[0])))
                     {
@@ -109,7 +194,6 @@ namespace MultiModelChat
                         return;
                     }
 
-                    // 暂停布局以提高性能
                     historyListPanel.SuspendLayout();
                     foreach (var line in lines)
                     {
@@ -133,8 +217,9 @@ namespace MultiModelChat
 
         private void ShowEmptyMessage()
         {
+            historyListPanel.Controls.Clear();
             Label emptyLabel = new Label();
-            emptyLabel.Text = LanguageManager.CurrentLanguage == Language.Chinese ? "暂无历史记录" : "No history records";
+            emptyLabel.Text = LanguageManager.CurrentLanguage == Language.Chinese ? "该日期暂无历史记录" : "No history records for this date";
             emptyLabel.Dock = DockStyle.Fill;
             emptyLabel.TextAlign = ContentAlignment.MiddleCenter;
             emptyLabel.Font = new Font("微软雅黑", 12);
@@ -148,7 +233,6 @@ namespace MultiModelChat
             itemPanel.Dock = DockStyle.Top;
             itemPanel.Padding = new Padding(0, 0, 0, 10);
             
-            // 计算合理高度
             int lineCount = text.Split('\n').Length;
             int estimatedHeight = Math.Max(45, Math.Min(250, lineCount * 22 + 20));
             itemPanel.Height = estimatedHeight + 10;
@@ -162,7 +246,6 @@ namespace MultiModelChat
             tb.BackColor = Color.FromArgb(250, 251, 252);
             tb.ScrollBars = ScrollBars.Vertical;
             
-            // 右侧删除按钮
             Button delBtn = new Button();
             delBtn.Text = "×";
             delBtn.Font = new Font("Arial", 12, FontStyle.Bold);
@@ -187,6 +270,12 @@ namespace MultiModelChat
 
         private void RemoveHistoryItem(string text, Panel panel)
         {
+            if (string.IsNullOrEmpty(currentHistoryFilePath) || !File.Exists(currentHistoryFilePath))
+            {
+                MessageBox.Show("无法删除：未找到历史文件");
+                return;
+            }
+
             string msg = LanguageManager.CurrentLanguage == Language.Chinese ? "确定删除这条记录吗？" : "Are you sure you want to delete this record?";
             string title = LanguageManager.Get("MsgTip");
             
@@ -194,14 +283,12 @@ namespace MultiModelChat
             {
                 try
                 {
-                    var lines = File.ReadAllLines(historyFilePath).ToList();
-                    // 找到对应的行并删除（这里如果有重复行可能会有问题，但在简单的历史记录中通常可行）
-                    // 更好的做法是传递索引，但动态删除面板后索引会变
+                    var lines = File.ReadAllLines(currentHistoryFilePath).ToList();
                     var index = lines.LastIndexOf(text);
                     if (index >= 0)
                     {
                         lines.RemoveAt(index);
-                        File.WriteAllLines(historyFilePath, lines);
+                        File.WriteAllLines(currentHistoryFilePath, lines);
                         historyListPanel.Controls.Remove(panel);
                         
                         if (historyListPanel.Controls.Count == 0)
@@ -219,18 +306,28 @@ namespace MultiModelChat
 
         private void ClearAllButton_Click(object sender, EventArgs e)
         {
-            string msg = LanguageManager.CurrentLanguage == Language.Chinese ? "确定要清空所有历史记录吗？" : "Are you sure you want to clear all history?";
+            if (string.IsNullOrEmpty(currentHistoryFilePath))
+            {
+                MessageBox.Show("没有可清空的历史记录");
+                return;
+            }
+
+            string msg = LanguageManager.CurrentLanguage == Language.Chinese ? "确定要清空这天的所有历史记录吗？" : "Are you sure you want to clear all history for this day?";
             string title = LanguageManager.CurrentLanguage == Language.Chinese ? "确认清空" : "Confirm Clear";
 
             if (MessageBox.Show(msg, title, MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes)
             {
                 try
                 {
-                    if (File.Exists(historyFilePath))
+                    if (File.Exists(currentHistoryFilePath))
                     {
-                        File.WriteAllText(historyFilePath, string.Empty);
+                        File.WriteAllText(currentHistoryFilePath, string.Empty);
                     }
-                    LoadHistory();
+                    
+                    if (dateSelector.SelectedItem != null)
+                    {
+                        LoadHistoryForDate(currentHistoryFilePath);
+                    }
                 }
                 catch (Exception ex)
                 {
