@@ -30,7 +30,7 @@ namespace MultiModelChat
         private static readonly Dictionary<string, Dictionary<Language, string>> _resources = new Dictionary<string, Dictionary<Language, string>>
         {
             // 窗体标题
-            ["AppTitle"] = new Dictionary<Language, string> { { Language.Chinese, "多模型问答系统" }, { Language.English, "Multi-Model Chat" } },
+            ["AppTitle"] = new Dictionary<Language, string> { { Language.Chinese, "AI一问多答" }, { Language.English, "AI Multi-Model Q&A" } },
             
             // 菜单
             ["MenuFile"] = new Dictionary<Language, string> { { Language.Chinese, "文件(&F)" }, { Language.English, "&File" } },
