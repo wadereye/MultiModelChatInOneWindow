@@ -1410,41 +1410,296 @@ namespace MultiModelChat
             try
             {
                 wv.Focus();
-                await Task.Delay(100);
+                await Task.Delay(150);
                 
-                string clickScript = @"
+                // 将问题文本转义，防止JS注入问题
+                string escapedQuestion = question
+                    .Replace("\\", "\\\\")
+                    .Replace("\"", "\\\"")
+                    .Replace("\r\n", "\\n")
+                    .Replace("\r", "\\n")
+                    .Replace("\n", "\\n")
+                    .Replace("'", "\\'")
+                    .Replace("`", "\\`");
+                
+                // 第一步：通过JS找到输入框并注入文本
+                string injectScript = @"
                     (function() {
-                        var inputElements = document.querySelectorAll('textarea[placeholder*=""输入""], textarea[aria-label*=""输入""], textarea, div[contenteditable=""true""]');
-                        for (var i = 0; i < inputElements.length; i++) {
-                            var element = inputElements[i];
-                            if (element.offsetHeight > 0 && element.offsetWidth > 0) {
-                                element.focus();
-                                element.click();
-                                return;
+                        var question = """ + escapedQuestion + @""";
+                        
+                        // 查找输入元素（textarea 或 contenteditable div）
+                        var selectors = [
+                            'textarea[placeholder*=""输入""]',
+                            'textarea[aria-label*=""输入""]',
+                            'textarea[placeholder*=""Ask""]',
+                            'textarea[placeholder*=""Send""]',
+                            'textarea[placeholder*=""Message""]',
+                            'textarea[placeholder*=""Type""]',
+                            'div[contenteditable=""true""][role=""textbox""]',
+                            'div[contenteditable=""true""]',
+                            'textarea'
+                        ];
+                        
+                        var inputElement = null;
+                        for (var s = 0; s < selectors.length; s++) {
+                            var elements = document.querySelectorAll(selectors[s]);
+                            for (var i = 0; i < elements.length; i++) {
+                                var el = elements[i];
+                                if (el.offsetHeight > 0 && el.offsetWidth > 0) {
+                                    inputElement = el;
+                                    break;
+                                }
                             }
+                            if (inputElement) break;
                         }
-                        var x = window.innerWidth / 2;
-                        var y = window.innerHeight - 100;
-                        var element = document.elementFromPoint(x, y);
-                        if (element) {
-                            element.click();
+                        
+                        if (!inputElement) {
+                            // 兜底：尝试点击底部区域来触发输入框
+                            var x = window.innerWidth / 2;
+                            var y = window.innerHeight - 100;
+                            var fallbackEl = document.elementFromPoint(x, y);
+                            if (fallbackEl) {
+                                fallbackEl.click();
+                            }
+                            return JSON.stringify({success: false, method: 'none', reason: 'no_input_found'});
                         }
+                        
+                        // 聚焦元素
+                        inputElement.focus();
+                        inputElement.click();
+                        
+                        // 根据元素类型注入文本
+                        if (inputElement.tagName.toLowerCase() === 'textarea' || inputElement.tagName.toLowerCase() === 'input') {
+                            // 对于 textarea/input，使用 value 设置 + 触发事件
+                            var nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+                                window.HTMLTextAreaElement.prototype, 'value'
+                            ) || Object.getOwnPropertyDescriptor(
+                                window.HTMLInputElement.prototype, 'value'
+                            );
+                            
+                            if (nativeInputValueSetter && nativeInputValueSetter.set) {
+                                nativeInputValueSetter.set.call(inputElement, question);
+                            } else {
+                                inputElement.value = question;
+                            }
+                            
+                            // 触发 React/Vue 等框架所需的事件
+                            inputElement.dispatchEvent(new Event('input', { bubbles: true }));
+                            inputElement.dispatchEvent(new Event('change', { bubbles: true }));
+                            inputElement.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true }));
+                            inputElement.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
+                            
+                            return JSON.stringify({success: true, method: 'value_setter', value: inputElement.value.substring(0, 50)});
+                        } else if (inputElement.getAttribute('contenteditable') === 'true') {
+                            // 对于 contenteditable div
+                            inputElement.innerHTML = '';
+                            inputElement.focus();
+                            
+                            // 使用 execCommand 插入文本（兼容性最好）
+                            document.execCommand('selectAll', false, null);
+                            document.execCommand('insertText', false, question);
+                            
+                            // 触发事件
+                            inputElement.dispatchEvent(new Event('input', { bubbles: true }));
+                            inputElement.dispatchEvent(new Event('change', { bubbles: true }));
+                            
+                            return JSON.stringify({success: true, method: 'contenteditable', value: inputElement.textContent.substring(0, 50)});
+                        }
+                        
+                        return JSON.stringify({success: false, method: 'unknown_type', reason: inputElement.tagName});
                     })();
                 ";
                 
-                await wv.ExecuteScriptAsync(clickScript);
+                string result = await wv.ExecuteScriptAsync(injectScript);
                 await Task.Delay(200);
                 
-                Clipboard.SetText(question);
-                SendKeys.SendWait("^{v}");
-                await Task.Delay(200);
-                SendKeys.SendWait("{ENTER}");
+                // 第二步：验证文本是否已注入成功
+                bool injected = false;
+                if (result != null && result.Contains("\"success\":true"))
+                {
+                    injected = true;
+                }
+                
+                // 第三步：如果JS注入失败，回退到剪贴板方式（带重试）
+                if (!injected)
+                {
+                    injected = await FallbackClipboardPaste(wv, question);
+                }
+                
+                // 第四步：二次验证 — 检查输入框中是否确实有内容
+                if (injected)
+                {
+                    string verifyScript = @"
+                        (function() {
+                            var selectors = ['textarea', 'div[contenteditable=""true""]'];
+                            for (var s = 0; s < selectors.length; s++) {
+                                var elements = document.querySelectorAll(selectors[s]);
+                                for (var i = 0; i < elements.length; i++) {
+                                    var el = elements[i];
+                                    if (el.offsetHeight > 0 && el.offsetWidth > 0) {
+                                        var content = el.value || el.textContent || el.innerText || '';
+                                        if (content.length > 0) {
+                                            return JSON.stringify({hasContent: true, length: content.length});
+                                        }
+                                    }
+                                }
+                            }
+                            return JSON.stringify({hasContent: false, length: 0});
+                        })();
+                    ";
+                    
+                    string verifyResult = await wv.ExecuteScriptAsync(verifyScript);
+                    
+                    // 如果验证发现输入框为空，再次尝试剪贴板方式
+                    if (verifyResult != null && verifyResult.Contains("\"hasContent\":false"))
+                    {
+                        await FallbackClipboardPaste(wv, question);
+                    }
+                }
+                
+                await Task.Delay(150);
+                
+                // 第五步：发送回车提交
+                string enterScript = @"
+                    (function() {
+                        var selectors = ['textarea', 'div[contenteditable=""true""]'];
+                        for (var s = 0; s < selectors.length; s++) {
+                            var elements = document.querySelectorAll(selectors[s]);
+                            for (var i = 0; i < elements.length; i++) {
+                                var el = elements[i];
+                                if (el.offsetHeight > 0 && el.offsetWidth > 0) {
+                                    el.focus();
+                                    // 模拟按下 Enter 键
+                                    var enterEvent = new KeyboardEvent('keydown', {
+                                        key: 'Enter',
+                                        code: 'Enter',
+                                        keyCode: 13,
+                                        which: 13,
+                                        bubbles: true
+                                    });
+                                    el.dispatchEvent(enterEvent);
+                                    return 'enter_sent';
+                                }
+                            }
+                        }
+                        
+                        // 兜底：尝试点击发送按钮
+                        var sendBtns = document.querySelectorAll('button[aria-label*=""发送""], button[aria-label*=""Send""], button[type=""submit""]');
+                        for (var i = 0; i < sendBtns.length; i++) {
+                            if (sendBtns[i].offsetHeight > 0) {
+                                sendBtns[i].click();
+                                return 'button_clicked';
+                            }
+                        }
+                        return 'no_action';
+                    })();
+                ";
+                
+                string enterResult = await wv.ExecuteScriptAsync(enterScript);
+                
+                // 如果JS模拟Enter无效，回退到SendKeys
+                if (enterResult != null && enterResult.Contains("no_action"))
+                {
+                    wv.Focus();
+                    await Task.Delay(100);
+                    SendKeys.SendWait("{ENTER}");
+                }
+                
                 await Task.Delay(100);
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"模拟输入到 {wv.Tag} 时出错: {ex.Message}");
             }
+        }
+        
+        /// <summary>
+        /// 回退方案：使用剪贴板粘贴，带重试机制
+        /// </summary>
+        private async Task<bool> FallbackClipboardPaste(Microsoft.Web.WebView2.WinForms.WebView2 wv, string question)
+        {
+            const int maxRetries = 3;
+            
+            for (int retry = 0; retry < maxRetries; retry++)
+            {
+                try
+                {
+                    wv.Focus();
+                    await Task.Delay(150);
+                    
+                    // 先通过JS确保输入框获得焦点
+                    string focusScript = @"
+                        (function() {
+                            var selectors = ['textarea', 'div[contenteditable=""true""]'];
+                            for (var s = 0; s < selectors.length; s++) {
+                                var elements = document.querySelectorAll(selectors[s]);
+                                for (var i = 0; i < elements.length; i++) {
+                                    var el = elements[i];
+                                    if (el.offsetHeight > 0 && el.offsetWidth > 0) {
+                                        el.focus();
+                                        el.click();
+                                        // 清空现有内容
+                                        if (el.tagName.toLowerCase() === 'textarea') {
+                                            el.select();
+                                        } else {
+                                            document.execCommand('selectAll', false, null);
+                                        }
+                                        return 'focused';
+                                    }
+                                }
+                            }
+                            return 'not_found';
+                        })();
+                    ";
+                    
+                    await wv.ExecuteScriptAsync(focusScript);
+                    await Task.Delay(100);
+                    
+                    // 设置剪贴板并粘贴
+                    Clipboard.SetText(question);
+                    await Task.Delay(50);
+                    
+                    // 使用 SendKeys 粘贴
+                    SendKeys.SendWait("^v");
+                    await Task.Delay(300);
+                    
+                    // 验证是否粘贴成功
+                    string verifyScript = @"
+                        (function() {
+                            var selectors = ['textarea', 'div[contenteditable=""true""]'];
+                            for (var s = 0; s < selectors.length; s++) {
+                                var elements = document.querySelectorAll(selectors[s]);
+                                for (var i = 0; i < elements.length; i++) {
+                                    var el = elements[i];
+                                    if (el.offsetHeight > 0 && el.offsetWidth > 0) {
+                                        var content = el.value || el.textContent || el.innerText || '';
+                                        return JSON.stringify({length: content.length});
+                                    }
+                                }
+                            }
+                            return JSON.stringify({length: 0});
+                        })();
+                    ";
+                    
+                    string verifyResult = await wv.ExecuteScriptAsync(verifyScript);
+                    
+                    // 检查是否有内容
+                    if (verifyResult != null && !verifyResult.Contains("\"length\":0"))
+                    {
+                        return true; // 粘贴成功
+                    }
+                    
+                    // 粘贴失败，等待后重试
+                    Console.WriteLine($"粘贴到 {wv.Tag} 失败，第 {retry + 1} 次重试...");
+                    await Task.Delay(300);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"剪贴板粘贴到 {wv.Tag} 出错: {ex.Message}");
+                }
+            }
+            
+            return false; // 所有重试都失败
         }
 
         protected override void OnResize(EventArgs e)
