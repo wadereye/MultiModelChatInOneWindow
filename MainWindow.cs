@@ -68,6 +68,9 @@ namespace MultiModelChat
         private Panel networkSectionContent;
         private ToolStrip networkToolStrip;
         private TextBox searchTextBox;
+        private ToolStripButton searchToolButton;
+        private ToolStripLabel sendStatusLabel;
+        private bool isSending = false;
         private System.Collections.Generic.List<ToolStripButton> expandToolButtons = new System.Collections.Generic.List<ToolStripButton>();
         
         // 右侧主内容区
@@ -775,6 +778,7 @@ namespace MultiModelChat
             // 查询按钮
             var searchBtn = CreateCompactToolButton(LanguageManager.Get("ToolSearch"), "🔍", Color.FromArgb(82, 196, 26));
             searchBtn.Click += SearchButton_Click;
+            searchToolButton = searchBtn;
             
             // 复制按钮
             var copyBtn = CreateCompactToolButton(LanguageManager.Get("ToolCopy"), "📋", Color.FromArgb(22, 119, 255));
@@ -808,6 +812,22 @@ namespace MultiModelChat
             networkToolStrip.Items.Add(configBtn);
             networkToolStrip.Items.Add(historyBtn);
             networkToolStrip.Items.Add(restoreBtn);
+
+            // 发送状态反馈标签
+            sendStatusLabel = new ToolStripLabel();
+            sendStatusLabel.AutoSize = true;
+            sendStatusLabel.Font = new Font("微软雅黑", 9);
+            sendStatusLabel.ForeColor = Color.FromArgb(120, 130, 145);
+            sendStatusLabel.Margin = new Padding(8, 2, 2, 2);
+            sendStatusLabel.Text = "";
+            networkToolStrip.Items.Add(sendStatusLabel);
+        }
+
+        private void SetSendStatus(string text, Color color)
+        {
+            if (sendStatusLabel == null) return;
+            sendStatusLabel.Text = text;
+            sendStatusLabel.ForeColor = color;
         }
 
         private ToolStripButton CreateCompactToolButton(string text, string icon, Color iconColor)
@@ -1158,6 +1178,12 @@ namespace MultiModelChat
             try
             {
                 await wv.EnsureCoreWebView2Async(null);
+                // 页面加载完成后：关闭广告弹窗 + 折叠左侧栏（幂等，失败不影响输入）
+                wv.CoreWebView2.NavigationCompleted += async (s2, e2) =>
+                {
+                    if (!e2.IsSuccess) return;
+                    try { await CdpInputInjector.PrepareAsync(wv, site.Url); } catch { }
+                };
                 wv.CoreWebView2.Navigate(site.Url);
                 initializedWebViewIndices.Add(index);
             }
@@ -1227,25 +1253,72 @@ namespace MultiModelChat
                 MessageBox.Show(LanguageManager.Get("MsgEnterQuestion"), LanguageManager.Get("MsgTip"), MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
-            
-            // 确保所有WebView都已初始化
+
+            if (isSending) return; // 防止发送中重复触发
+            isSending = true;
+            if (searchToolButton != null) searchToolButton.Enabled = false;
+
             var selectedSites = config.Sites.FindAll(s => s.IsSelected);
-            for (int i = 0; i < selectedSites.Count; i++)
-            {
-                await InitializeWebViewIfNeeded(i, selectedSites[i]);
-            }
-            
             try
             {
-                SaveHistory(question);
-                foreach (var wv in activeWebViews)
+                if (activeWebViews.Count == 0)
                 {
-                    await SimulateInputToWebView(wv, question);
+                    SetSendStatus("未选择任何站点", Color.FromArgb(255, 77, 79));
+                    return;
                 }
+
+                // 并行初始化所有 WebView
+                SetSendStatus($"初始化 {selectedSites.Count} 个站点…", Color.FromArgb(24, 144, 255));
+                var initTasks = new System.Collections.Generic.List<Task>();
+                for (int i = 0; i < selectedSites.Count; i++)
+                {
+                    initTasks.Add(InitializeWebViewIfNeeded(i, selectedSites[i]));
+                }
+                await Task.WhenAll(initTasks);
+
+                SaveHistory(question);
+
+                // 并行 CDP 注入：每个 WebView 独立渲染焦点，互不抢占系统焦点/剪贴板
+                SetSendStatus($"同时发送到 {activeWebViews.Count} 个站点…", Color.FromArgb(24, 144, 255));
+                var injectTasks = new System.Collections.Generic.List<Task<CdpInputInjector.InjectResult>>();
+                for (int i = 0; i < activeWebViews.Count; i++)
+                {
+                    string url = i < selectedSites.Count ? selectedSites[i].Url : "";
+                    injectTasks.Add(CdpInputInjector.InjectAsync(activeWebViews[i], url, question));
+                }
+                var results = await Task.WhenAll(injectTasks);
+
+                int okCount = 0;
+                var failedIndices = new System.Collections.Generic.List<int>();
+                for (int i = 0; i < results.Length; i++)
+                {
+                    if (results[i].Success) okCount++;
+                    else failedIndices.Add(i);
+                }
+
+                // CDP 失败的站点 → 串行旧路径兜底（剪贴板/SendKeys 是全局资源，不能并行）
+                int fallbackCount = 0;
+                foreach (var idx in failedIndices)
+                {
+                    SetSendStatus($"兼容模式重试 {activeWebViews[idx].Tag}…", Color.FromArgb(250, 173, 20));
+                    await SimulateInputToWebView(activeWebViews[idx], question);
+                    fallbackCount++;
+                }
+
+                if (failedIndices.Count == 0)
+                    SetSendStatus($"✓ 已同时发送 {okCount}/{activeWebViews.Count}", Color.FromArgb(82, 196, 26));
+                else
+                    SetSendStatus($"✓ 直接 {okCount} · 兼容重试 {fallbackCount}", Color.FromArgb(82, 196, 26));
             }
             catch (Exception ex)
             {
+                SetSendStatus("发送出错", Color.FromArgb(255, 77, 79));
                 MessageBox.Show($"{LanguageManager.Get("MsgError")}: {ex.Message}", LanguageManager.Get("MsgError"), MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                isSending = false;
+                if (searchToolButton != null) searchToolButton.Enabled = true;
             }
         }
 
