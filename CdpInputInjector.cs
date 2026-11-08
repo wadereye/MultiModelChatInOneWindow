@@ -184,8 +184,7 @@ namespace MultiModelChat
 
                 // 4. 发送：先 trusted Enter
                 await DispatchEnterAsync(wv);
-                await Task.Delay(300);
-                if (await IsInputClearedAsync(wv, inputSels))
+                if (await WaitInputClearedAsync(wv, inputSels, 1500))
                 {
                     result.Success = true;
                     result.Method = "cdp_enter";
@@ -195,8 +194,7 @@ namespace MultiModelChat
                 // 5. Enter 未生效 → 点击发送按钮
                 var clickInfo = await EvalJsonAsync(wv, BuildClickSendScript(sendSels));
                 bool clicked = clickInfo?.RootElement.TryGetProperty("clicked", out var c) == true && c.GetBoolean();
-                await Task.Delay(300);
-                if (await IsInputClearedAsync(wv, inputSels))
+                if (await WaitInputClearedAsync(wv, inputSels, 1500))
                 {
                     result.Success = true;
                     result.Method = clicked ? "cdp_button" : "cdp_enter_delayed";
@@ -323,6 +321,18 @@ namespace MultiModelChat
             await wv.CoreWebView2.CallDevToolsProtocolMethodAsync("Input.dispatchKeyEvent", up);
         }
 
+        private static async Task<bool> WaitInputClearedAsync(WebView2 wv, string inputSels, int timeoutMs)
+        {
+            int waited = 0;
+            while (waited < timeoutMs)
+            {
+                if (await IsInputClearedAsync(wv, inputSels)) return true;
+                await Task.Delay(250);
+                waited += 250;
+            }
+            return await IsInputClearedAsync(wv, inputSels);
+        }
+
         private static async Task<bool> IsInputClearedAsync(WebView2 wv, string inputSels)
         {
             var info = await EvalJsonAsync(wv, BuildReadScript(inputSels));
@@ -363,6 +373,8 @@ namespace MultiModelChat
         }
 
         // 读回输入框内容长度
+        // 富文本编辑器（如千问的 Slate）把占位提示渲染成真实 DOM 文本，
+        // 必须排除占位/零宽节点，否则发送后已清空会被误判为仍有内容
         private static string BuildReadScript(string selsJson)
         {
             return @"(function(){
@@ -377,7 +389,15 @@ namespace MultiModelChat
                 }
                 if (!el) return JSON.stringify({found:false, len:0});
                 var tag = el.tagName.toLowerCase();
-                var v = (tag === 'textarea' || tag === 'input') ? (el.value || '') : (el.textContent || '');
+                var v;
+                if (tag === 'textarea' || tag === 'input'){
+                    v = el.value || '';
+                } else {
+                    var clone = el.cloneNode(true);
+                    var junk = clone.querySelectorAll('[data-slate-placeholder],[data-slate-zero-width],[data-placeholder],[class*=""placeholder""],[class*=""Placeholder""]');
+                    for (var j = junk.length - 1; j >= 0; j--){ if (junk[j].parentNode) junk[j].parentNode.removeChild(junk[j]); }
+                    v = clone.textContent || '';
+                }
                 return JSON.stringify({found:true, len:v.trim().length});
             })();";
         }
