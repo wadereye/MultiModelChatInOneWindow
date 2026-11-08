@@ -78,7 +78,7 @@ namespace MultiModelChat
             ["AboutTitle"] = new Dictionary<Language, string> { { Language.Chinese, "关于" }, { Language.English, "About" } },
             ["AboutAuthor"] = new Dictionary<Language, string> { { Language.Chinese, "软件作者：跋涉者" }, { Language.English, "Author: Bashe" } },
             ["AboutEmail"] = new Dictionary<Language, string> { { Language.Chinese, "邮箱：wader129@qq.com" }, { Language.English, "Email: wader129@qq.com" } },
-            ["AboutVersion"] = new Dictionary<Language, string> { { Language.Chinese, "当前版本：V2.1" }, { Language.English, "Version: V2.1" } },
+            ["AboutVersion"] = new Dictionary<Language, string> { { Language.Chinese, "当前版本：V2.2" }, { Language.English, "Version: V2.2" } },
             
             // 按钮
             ["BtnSave"] = new Dictionary<Language, string> { { Language.Chinese, "保存配置" }, { Language.English, "Save" } },
